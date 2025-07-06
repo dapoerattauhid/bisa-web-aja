@@ -17,45 +17,43 @@ export const populateDailyMenus = async () => {
       return;
     }
 
-    console.log('Found menu items:', menuItems);
+    console.log('Found menu items:', menuItems.length);
     
-    // Create daily menu entries for the next 7 days
-    // Note: We'll use the menu_items directly since daily_menus table structure
-    // is used for scheduling specific items for specific dates
+    // Since daily_menus table doesn't exist in types, we'll work directly with menu_items
+    // and use order_schedules to manage availability by date
     
-    const dailyMenuPromises = [];
+    const schedulePromises = [];
     
     for (let i = 0; i < 7; i++) {
       const date = addDays(new Date(), i);
       const dateStr = format(date, 'yyyy-MM-dd');
       
-      // For each menu item, create a daily menu entry
-      for (const item of menuItems) {
-        dailyMenuPromises.push(
-          supabase
-            .from('daily_menus')
-            .upsert({
-              date: dateStr,
-              food_item_id: item.id, // This references menu_items.id
-              price: item.price,
-              is_available: true,
-              max_quantity: 100, // Default max quantity
-              current_quantity: 0
-            }, {
-              onConflict: 'date,food_item_id'
-            })
-        );
-      }
+      // Create or update order schedule for this date
+      schedulePromises.push(
+        supabase
+          .from('order_schedules')
+          .upsert({
+            date: dateStr,
+            is_blocked: false,
+            max_orders: 100, // Default max orders per day
+            current_orders: 0,
+            cutoff_date: dateStr,
+            cutoff_time: '10:00:00',
+            notes: 'Auto-generated schedule'
+          }, {
+            onConflict: 'date'
+          })
+      );
     }
 
-    const results = await Promise.all(dailyMenuPromises);
+    const results = await Promise.all(schedulePromises);
     
     // Check for errors
     const errors = results.filter(result => result.error);
     if (errors.length > 0) {
-      console.error('Some daily menus failed to populate:', errors);
+      console.error('Some schedules failed to populate:', errors);
     } else {
-      console.log('Daily menus populated successfully');
+      console.log('Order schedules populated successfully for next 7 days');
     }
 
   } catch (error) {

@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -35,7 +34,7 @@ export const useCartOperations = () => {
       const { data, error } = await supabase
         .from('children')
         .select('*')
-        .eq('user_id', user?.id);
+        .eq('parent_id', user?.id);
 
       if (error) {
         console.log('Error fetching children:', error);
@@ -108,7 +107,7 @@ export const useCartOperations = () => {
       // Create order items using the correct menu_item_id from the cart items
       const orderItems = items.map(item => ({
         order_id: order.id,
-        menu_item_id: item.food_item_id,
+        menu_item_id: item.menu_item_id,
         quantity: item.quantity,
         price: item.price
       }));

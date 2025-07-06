@@ -27,6 +27,19 @@ export const useDailyMenus = () => {
     try {
       const dateStr = format(date, 'yyyy-MM-dd');
       
+      // Check if date is available in order_schedules
+      const { data: schedule } = await supabase
+        .from('order_schedules')
+        .select('*')
+        .eq('date', dateStr)
+        .single();
+
+      // If date is blocked, return empty menus
+      if (schedule?.is_blocked) {
+        setDailyMenus([]);
+        return;
+      }
+      
       // Get all available menu items with category information
       const { data, error } = await supabase
         .from('menu_items')
