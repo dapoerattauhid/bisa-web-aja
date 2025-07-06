@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -40,10 +39,13 @@ export const useCartOperations = () => {
         return;
       }
 
-      const { data, error } = await supabase
+      // Use explicit type annotation to avoid deep type instantiation
+      const response = await supabase
         .from('children')
-        .select('*')
+        .select('id, name, class_name')
         .eq('parent_id', user.id);
+
+      const { data, error } = response;
 
       if (error) {
         console.log('Error fetching children:', error);
