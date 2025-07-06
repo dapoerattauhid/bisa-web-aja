@@ -39,16 +39,11 @@ export const useCartOperations = () => {
         return;
       }
 
-      // Use direct query without complex type inference
-      const queryResult = await supabase
-        .from('children')
-        .select('id, name, class_name')
-        .eq('parent_id', user.id);
-
-      const { data, error } = queryResult;
-
-      if (error) {
-        console.log('Error fetching children:', error);
+      // Use explicit typing to avoid complex inference
+      const response = await supabase.rpc('get_children_by_parent', { parent_id: user.id });
+      
+      if (response.error) {
+        console.log('Error fetching children:', response.error);
         // Fallback: create mock children data since table might not exist
         setChildren([
           { id: '1', name: 'Anak 1', class_name: 'Kelas 1A' },
@@ -57,8 +52,9 @@ export const useCartOperations = () => {
         return;
       }
       
-      // Cast the data to our expected type
-      setChildren((data as Child[]) || []);
+      // Use the data directly with explicit typing
+      const childrenData: Child[] = response.data || [];
+      setChildren(childrenData);
     } catch (error) {
       console.error('Error fetching children:', error);
       // Fallback data
