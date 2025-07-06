@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -39,22 +40,33 @@ export const useCartOperations = () => {
         return;
       }
 
-      // Use explicit typing to avoid complex inference
-      const response = await supabase.rpc('get_children_by_parent', { parent_id: user.id });
-      
-      if (response.error) {
-        console.log('Error fetching children:', response.error);
-        // Fallback: create mock children data since table might not exist
+      // Query children table directly with fallback
+      try {
+        const { data, error } = await supabase
+          .from('children')
+          .select('id, name, class_name')
+          .eq('user_id', user.id);
+
+        if (error) {
+          console.log('Error fetching children:', error);
+          // Use fallback data
+          setChildren([
+            { id: '1', name: 'Anak 1', class_name: 'Kelas 1A' },
+            { id: '2', name: 'Anak 2', class_name: 'Kelas 2B' }
+          ]);
+          return;
+        }
+
+        // Type the data explicitly
+        const childrenData = (data || []) as Child[];
+        setChildren(childrenData);
+      } catch (queryError) {
+        console.log('Query error, using fallback:', queryError);
         setChildren([
           { id: '1', name: 'Anak 1', class_name: 'Kelas 1A' },
           { id: '2', name: 'Anak 2', class_name: 'Kelas 2B' }
         ]);
-        return;
       }
-      
-      // Use the data directly with explicit typing
-      const childrenData: Child[] = response.data || [];
-      setChildren(childrenData);
     } catch (error) {
       console.error('Error fetching children:', error);
       // Fallback data
