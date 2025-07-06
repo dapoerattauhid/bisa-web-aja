@@ -39,12 +39,13 @@ export const useCartOperations = () => {
         return;
       }
 
-      // Simplified query to avoid type instantiation issues
-      const { data, error } = await supabase
+      // Use direct query without complex type inference
+      const queryResult = await supabase
         .from('children')
         .select('id, name, class_name')
-        .eq('parent_id', user.id)
-        .returns<Child[]>();
+        .eq('parent_id', user.id);
+
+      const { data, error } = queryResult;
 
       if (error) {
         console.log('Error fetching children:', error);
@@ -56,7 +57,8 @@ export const useCartOperations = () => {
         return;
       }
       
-      setChildren(data || []);
+      // Cast the data to our expected type
+      setChildren((data as Child[]) || []);
     } catch (error) {
       console.error('Error fetching children:', error);
       // Fallback data
