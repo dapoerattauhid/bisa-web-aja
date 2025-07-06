@@ -1,194 +1,104 @@
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider, useAuth } from "@/hooks/useAuth";
-import { useUserRole } from "@/hooks/useUserRole";
-import Index from "./pages/Index";
-import Auth from "./pages/Auth";
-import Children from "./pages/Children";
-import Orders from "./pages/Orders";
-import NotFound from "./pages/NotFound";
-import Navbar from "./components/Navbar";
-import AdminNavbar from "./components/AdminNavbar";
-import MidtransScript from "./components/MidtransScript";
+import React, { useEffect, useState } from 'react';
+import { BrowserRouter as Router, Route, Routes, Navigate, useLocation } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
+import { Navbar } from '@/components/Navbar';
+import Home from '@/pages/Home';
+import Menu from '@/pages/Menu';
+import Orders from '@/pages/Orders';
+import Children from '@/pages/Children';
+import Login from '@/pages/Login';
+import Register from '@/pages/Register';
+import AdminDashboard from '@/pages/admin/AdminDashboard';
+import FoodManagement from '@/pages/admin/FoodManagement';
+import OrderManagement from '@/pages/admin/OrderManagement';
+import OrderRecap from '@/pages/admin/OrderRecap';
+import Reports from '@/pages/admin/Reports';
+import ScheduleManagement from '@/pages/admin/ScheduleManagement';
+import PopulateDailyMenus from '@/pages/admin/PopulateDailyMenus';
+import { MidtransScript } from '@/components/MidtransScript';
+import CashierDashboard from '@/pages/cashier/CashierDashboard';
+import CashierReports from '@/pages/cashier/CashierReports';
+import { useUserRole } from '@/hooks/useUserRole';
 
-// Admin pages
-import AdminDashboard from "./pages/admin/AdminDashboard";
-import FoodManagement from "./pages/admin/FoodManagement";
-import OrderManagement from "./pages/admin/OrderManagement";
-import ScheduleManagement from "./pages/admin/ScheduleManagement";
-import Reports from "./pages/admin/Reports";
-import PopulateDailyMenus from "./pages/admin/PopulateDailyMenus";
-import OrderRecap from "./pages/admin/OrderRecap";
+function App() {
+  const { user, loading: authLoading } = useAuth();
+  const { data: userRole, isLoading: roleLoading } = useUserRole();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-const queryClient = new QueryClient();
+  useEffect(() => {
+    setIsLoggedIn(!!user);
+  }, [user]);
 
-const ProtectedRoute = ({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) => {
-  const { user, loading } = useAuth();
-  const { role, loading: roleLoading, isAdmin } = useUserRole();
+  const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+    const location = useLocation();
   
-  if (loading || roleLoading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-orange-500"></div>
-      </div>
-    );
+    if (authLoading || roleLoading) {
+      return <div>Loading...</div>;
+    }
+  
+    if (!isLoggedIn) {
+      return <Navigate to="/login" replace state={{ from: location }} />;
+    }
+  
+    return <>{children}</>;
+  };
+
+  if (authLoading || roleLoading) {
+    return <div>Loading...</div>;
   }
-  
-  if (!user) {
-    return <Navigate to="/auth" replace />;
-  }
 
-  if (adminOnly && !isAdmin) {
-    return <Navigate to="/" replace />;
-  }
-  
-  return <>{children}</>;
-};
-
-const PublicRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, loading } = useAuth();
-  
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-orange-500"></div>
-      </div>
-    );
-  }
-  
-  if (user) {
-    return <Navigate to="/" replace />;
-  }
-  
-  return <>{children}</>;
-};
-
-const AppContent = () => {
-  const { user } = useAuth();
-  const { isAdmin } = useUserRole();
-  const isAdminRoute = window.location.pathname.startsWith('/admin');
-  
   return (
-    <div className="min-h-screen bg-gray-50">
-      {user && (
-        isAdminRoute ? <AdminNavbar /> : <Navbar />
-      )}
-      <Routes>
-        <Route 
-          path="/auth" 
-          element={
-            <PublicRoute>
-              <Auth />
-            </PublicRoute>
-          } 
-        />
-        
-        {/* Regular user routes */}
-        <Route 
-          path="/" 
-          element={
-            <ProtectedRoute>
-              <Index />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/children" 
-          element={
-            <ProtectedRoute>
-              <Children />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/orders" 
-          element={
-            <ProtectedRoute>
-              <Orders />
-            </ProtectedRoute>
-          } 
-        />
-
-        {/* Admin routes */}
-        <Route 
-          path="/admin" 
-          element={
-            <ProtectedRoute adminOnly={true}>
-              <AdminDashboard />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/admin/food-management" 
-          element={
-            <ProtectedRoute adminOnly={true}>
-              <FoodManagement />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/admin/order-management" 
-          element={
-            <ProtectedRoute adminOnly={true}>
-              <OrderManagement />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/admin/schedule-management" 
-          element={
-            <ProtectedRoute adminOnly={true}>
-              <ScheduleManagement />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/admin/order-recap" 
-          element={
-            <ProtectedRoute adminOnly={true}>
-              <OrderRecap />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/admin/reports" 
-          element={
-            <ProtectedRoute adminOnly={true}>
-              <Reports />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/admin/populate-daily-menus" 
-          element={
-            <ProtectedRoute adminOnly={true}>
-              <PopulateDailyMenus />
-            </ProtectedRoute>
-          } 
-        />
-        
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </div>
+    <Router>
+      <div className="min-h-screen bg-gray-50">
+        <MidtransScript />
+        <Routes>
+          {/* Public routes */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/menu" element={<><Navbar /><Menu /></>} />
+          
+          {/* Protected routes */}
+          <Route
+            path="/*"
+            element={
+              <ProtectedRoute>
+                <Routes>
+                  {/* Parent routes */}
+                  <Route path="/" element={<><Navbar /><Home /></>} />
+                  <Route path="/orders" element={<><Navbar /><Orders /></>} />
+                  <Route path="/children" element={<><Navbar /><Children /></>} />
+                  
+                  {/* Admin routes */}
+                  {userRole === 'admin' && (
+                    <>
+                      <Route path="/admin" element={<><Navbar /><AdminDashboard /></>} />
+                      <Route path="/admin/food-management" element={<><Navbar /><FoodManagement /></>} />
+                      <Route path="/admin/order-management" element={<><Navbar /><OrderManagement /></>} />
+                      <Route path="/admin/order-recap" element={<><Navbar /><OrderRecap /></>} />
+                      <Route path="/admin/reports" element={<><Navbar /><Reports /></>} />
+                      <Route path="/admin/schedule-management" element={<><Navbar /><ScheduleManagement /></>} />
+                      <Route path="/admin/populate-daily-menus" element={<><Navbar /><PopulateDailyMenus /></>} />
+                    </>
+                  )}
+                  
+                  {/* Cashier routes */}
+                  {userRole === 'cashier' && (
+                    <>
+                      <Route path="/cashier" element={<><Navbar /><CashierDashboard /></>} />
+                      <Route path="/cashier/reports" element={<><Navbar /><CashierReports /></>} />
+                    </>
+                  )}
+                  
+                  {/* Default route */}
+                  <Route path="*" element={<Navigate to="/" />} />
+                </Routes>
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </div>
+    </Router>
   );
-};
-
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <MidtransScript />
-      <BrowserRouter>
-        <AuthProvider>
-          <AppContent />
-        </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+}
 
 export default App;

@@ -1,9 +1,18 @@
-
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { Home, User, ShoppingBag, LogOut, Settings, Menu, X } from "lucide-react";
-
-import { Button } from "@/components/ui/button";
+import React from 'react';
+import {
+  Home,
+  BarChart3,
+  ShoppingCart,
+  Calendar,
+  UtensilsCrossed,
+  FileText,
+  Users,
+  Plus,
+  TrendingUp,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,158 +20,123 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useAuth } from "@/hooks/useAuth";
-import { useUserRole } from "@/hooks/useUserRole";
+} from "@/components/ui/dropdown-menu"
+import { useAuth } from '@/hooks/useAuth';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
-const Navbar = () => {
-  const navigate = useNavigate();
+export const Navbar = () => {
   const { user, signOut } = useAuth();
-  const { isAdmin } = useUserRole();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { data: userRole } = useUserRole();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/login');
+  };
+
+  const getNavItems = () => {
+    if (userRole === 'admin') {
+      return [
+        { path: '/admin', label: 'Dashboard', icon: BarChart3 },
+        { path: '/admin/food-management', label: 'Kelola Menu', icon: UtensilsCrossed },
+        { path: '/admin/order-management', label: 'Kelola Pesanan', icon: ShoppingCart },
+        { path: '/admin/order-recap', label: 'Rekapitulasi', icon: FileText },
+        { path: '/admin/reports', label: 'Laporan', icon: TrendingUp },
+        { path: '/admin/schedule-management', label: 'Jadwal', icon: Calendar },
+        { path: '/admin/populate-daily-menus', label: 'Isi Menu Harian', icon: Plus },
+      ];
+    } else if (userRole === 'cashier') {
+      return [
+        { path: '/cashier', label: 'Dashboard Kasir', icon: BarChart3 },
+        { path: '/cashier/reports', label: 'Laporan Kasir', icon: FileText },
+      ];
+    } else {
+      return [
+        { path: '/', label: 'Beranda', icon: Home },
+        { path: '/orders', label: 'Pesanan Saya', icon: ShoppingCart },
+        { path: '/children', label: 'Data Anak', icon: Users },
+      ];
+    }
+  };
+
+  const navItems = getNavItems();
 
   return (
-    <div className="sticky top-0 z-50 bg-orange-500 text-white py-2 md:py-3 shadow-md">
-      <div className="container mx-auto px-3 md:px-4 flex items-center justify-between">
-        <Link to="/" className="text-lg md:text-2xl font-bold truncate">
-          CateringKu
+    <div className="bg-white border-b shadow-sm sticky top-0 z-50">
+      <div className="container mx-auto py-4 px-6 flex items-center justify-between">
+        <Link to="/" className="text-xl font-bold text-orange-500">
+          Kantin App
         </Link>
 
-        {/* Desktop Navigation */}
-        <div className="hidden lg:flex items-center space-x-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-white hover:bg-white/10 text-xs px-2 py-1"
-            onClick={() => navigate('/')}
-          >
-            <Home className="h-3 w-3 mr-1" />
-            Menu & Pesan
-          </Button>
-          
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-white hover:bg-white/10 text-xs px-2 py-1"
-            onClick={() => navigate('/children')}
-          >
-            <User className="h-3 w-3 mr-1" />
-            Data Anak
-          </Button>
-          
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-white hover:bg-white/10 text-xs px-2 py-1"
-            onClick={() => navigate('/orders')}
-          >
-            <ShoppingBag className="h-3 w-3 mr-1" />
-            Riwayat
-          </Button>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          {/* Mobile Menu Button */}
-          <div className="lg:hidden">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="text-white hover:bg-white/10 p-1 h-8 w-8"
+        <div className="hidden md:flex items-center space-x-4">
+          {navItems.map((item) => (
+            <Link
+              key={item.path}
+              to={item.path}
+              className={`flex items-center space-x-2 px-3 py-2 rounded-md hover:bg-gray-100 ${location.pathname === item.path ? 'bg-gray-100 font-medium' : ''}`}
             >
-              {isMobileMenuOpen ? (
-                <X className="h-4 w-4" />
-              ) : (
-                <Menu className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-
-          {/* User Menu */}
+              <item.icon className="h-4 w-4" />
+              <span>{item.label}</span>
+            </Link>
+          ))}
+          
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-7 w-7 md:h-8 md:w-8 rounded-full p-0">
-                <Avatar className="h-7 w-7 md:h-8 md:w-8">
-                  <AvatarImage src={user?.user_metadata?.avatar_url || ""} alt={user?.user_metadata?.full_name || "Avatar"} />
-                  <AvatarFallback className="text-xs">{user?.user_metadata?.full_name?.charAt(0).toUpperCase() || "U"}</AvatarFallback>
+              <Button variant="ghost" className="h-8 w-8 p-0">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={user?.user_metadata?.avatar_url} alt={user?.user_metadata?.full_name} />
+                  <AvatarFallback>{user?.user_metadata?.full_name?.charAt(0)}</AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-48 mr-2">
-              <DropdownMenuLabel className="text-sm">Akun</DropdownMenuLabel>
+            <DropdownMenuContent className="w-56" align="end" forceMount>
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium leading-none">
+                    {user?.user_metadata?.full_name}
+                  </p>
+                  <p className="text-xs leading-none text-muted-foreground">
+                    {user?.email}
+                  </p>
+                </div>
+              </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-xs">
-                <User className="mr-2 h-3 w-3" />
-                <span>Profil</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate('/orders')} className="text-xs">
-                <ShoppingBag className="mr-2 h-3 w-3" />
-                <span>Pesanan</span>
-              </DropdownMenuItem>
-              {isAdmin && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => navigate('/admin')} className="text-xs">
-                    <Settings className="mr-2 h-3 w-3" />
-                    <span>Panel Admin</span>
-                  </DropdownMenuItem>
-                </>
-              )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => signOut()} className="text-xs">
-                <LogOut className="mr-2 h-3 w-3" />
-                <span>Keluar</span>
+              <DropdownMenuItem onClick={handleSignOut}>
+                Logout
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </div>
 
-      {/* Mobile Navigation Menu */}
-      {isMobileMenuOpen && (
-        <div className="lg:hidden border-t border-orange-400 bg-orange-500">
-          <div className="container mx-auto px-3 py-3 space-y-1">
-            <Button
-              variant="ghost"
-              className="w-full justify-start text-white hover:bg-white/10 text-sm h-8"
-              onClick={() => {
-                navigate('/');
-                setIsMobileMenuOpen(false);
-              }}
-            >
-              <Home className="h-4 w-4 mr-2" />
-              Menu & Pesan
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button variant="outline" className="md:hidden">
+              Menu
             </Button>
-            
-            <Button
-              variant="ghost"
-              className="w-full justify-start text-white hover:bg-white/10 text-sm h-8"
-              onClick={() => {
-                navigate('/children');
-                setIsMobileMenuOpen(false);
-              }}
-            >
-              <User className="h-4 w-4 mr-2" />
-              Data Anak
-            </Button>
-            
-            <Button
-              variant="ghost"
-              className="w-full justify-start text-white hover:bg-white/10 text-sm h-8"
-              onClick={() => {
-                navigate('/orders');
-                setIsMobileMenuOpen(false);
-              }}
-            >
-              <ShoppingBag className="h-4 w-4 mr-2" />
-              Riwayat Pesanan
-            </Button>
-          </div>
-        </div>
-      )}
+          </SheetTrigger>
+          <SheetContent side="left" className="w-64">
+            <SheetHeader>
+              <SheetTitle>Menu</SheetTitle>
+            </SheetHeader>
+            <div className="flex flex-col space-y-2 mt-4">
+              {navItems.map((item) => (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`flex items-center space-x-2 px-3 py-2 rounded-md hover:bg-gray-100 ${location.pathname === item.path ? 'bg-gray-100 font-medium' : ''}`}
+                >
+                  <item.icon className="h-4 w-4" />
+                  <span>{item.label}</span>
+                </Link>
+              ))}
+              <Button variant="outline" onClick={handleSignOut}>
+                Logout
+              </Button>
+            </div>
+          </SheetContent>
+        </Sheet>
+      </div>
     </div>
   );
 };
-
-export default Navbar;
