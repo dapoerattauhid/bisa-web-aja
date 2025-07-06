@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -31,10 +32,18 @@ export const useCartOperations = () => {
 
   const fetchChildren = async () => {
     try {
+      if (!user?.id) {
+        setChildren([
+          { id: '1', name: 'Anak 1', class_name: 'Kelas 1A' },
+          { id: '2', name: 'Anak 2', class_name: 'Kelas 2B' }
+        ]);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('children')
         .select('*')
-        .eq('parent_id', user?.id);
+        .eq('parent_id', user.id);
 
       if (error) {
         console.log('Error fetching children:', error);
