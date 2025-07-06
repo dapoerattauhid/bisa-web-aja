@@ -39,13 +39,12 @@ export const useCartOperations = () => {
         return;
       }
 
-      // Use explicit type annotation to avoid deep type instantiation
-      const response = await supabase
+      // Simplified query to avoid type instantiation issues
+      const { data, error } = await supabase
         .from('children')
         .select('id, name, class_name')
-        .eq('parent_id', user.id);
-
-      const { data, error } = response;
+        .eq('parent_id', user.id)
+        .returns<Child[]>();
 
       if (error) {
         console.log('Error fetching children:', error);
