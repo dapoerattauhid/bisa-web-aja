@@ -5,7 +5,7 @@ export interface CartItem {
   price: number;
   quantity: number;
   image_url: string;
-  food_item_id: string; // Add this field to store the actual food_item_id
-  date?: string; // Add optional date field
-  child_id?: string; // Add optional child_id field
+  menu_item_id: string; // Standardize to menu_item_id instead of food_item_id
+  date?: string;
+  child_id?: string;
 }

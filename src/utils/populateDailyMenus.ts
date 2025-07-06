@@ -4,7 +4,7 @@ import { format, addDays } from 'date-fns';
 
 export const populateDailyMenus = async () => {
   try {
-    // Get all available menu items (not food_items)
+    // Get all available menu items
     const { data: menuItems, error: menuError } = await supabase
       .from('menu_items')
       .select('*')
@@ -19,17 +19,47 @@ export const populateDailyMenus = async () => {
 
     console.log('Found menu items:', menuItems);
     
-    // Since daily_menus table doesn't exist in the schema, 
-    // this function will just log the menu items that would be populated
+    // Create daily menu entries for the next 7 days
+    // Note: We'll use the menu_items directly since daily_menus table structure
+    // is used for scheduling specific items for specific dates
+    
+    const dailyMenuPromises = [];
+    
     for (let i = 0; i < 7; i++) {
       const date = addDays(new Date(), i);
       const dateStr = format(date, 'yyyy-MM-dd');
       
-      console.log(`Would populate daily menus for ${dateStr} with ${menuItems.length} items`);
+      // For each menu item, create a daily menu entry
+      for (const item of menuItems) {
+        dailyMenuPromises.push(
+          supabase
+            .from('daily_menus')
+            .upsert({
+              date: dateStr,
+              food_item_id: item.id, // This references menu_items.id
+              price: item.price,
+              is_available: true,
+              max_quantity: 100, // Default max quantity
+              current_quantity: 0
+            }, {
+              onConflict: 'date,food_item_id'
+            })
+        );
+      }
     }
 
-    console.log('Daily menus population simulation completed');
+    const results = await Promise.all(dailyMenuPromises);
+    
+    // Check for errors
+    const errors = results.filter(result => result.error);
+    if (errors.length > 0) {
+      console.error('Some daily menus failed to populate:', errors);
+    } else {
+      console.log('Daily menus populated successfully');
+    }
+
   } catch (error) {
     console.error('Error in populateDailyMenus:', error);
+    throw error;
   }
 };
