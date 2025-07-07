@@ -6,25 +6,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Users, Shield, UserCheck } from 'lucide-react';
-
-interface User {
-  id: string;
-  email: string;
-  user_metadata: {
-    full_name?: string;
-  };
-  created_at: string;
-}
+import type { User } from '@supabase/supabase-js';
 
 interface UserRole {
   user_id: string;
   role: string;
 }
 
+interface ProfileUser {
+  id: string;
+  full_name: string | null;
+  created_at: string;
+}
+
 export const UserRoleManager = () => {
   const [users, setUsers] = useState<User[]>([]);
+  const [profileUsers, setProfileUsers] = useState<ProfileUser[]>([]);
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
   const [loading, setLoading] = useState(true);
+  const [useProfiles, setUseProfiles] = useState(false);
 
   useEffect(() => {
     fetchUsersAndRoles();
@@ -32,26 +32,23 @@ export const UserRoleManager = () => {
 
   const fetchUsersAndRoles = async () => {
     try {
-      // Fetch users from auth.users (admin only)
+      // Try to fetch users from auth.users (admin only)
       const { data: usersData, error: usersError } = await supabase.auth.admin.listUsers();
       
       if (usersError) {
-        console.error('Error fetching users:', usersError);
+        console.error('Error fetching users from auth:', usersError);
         // Fallback: fetch from profiles table
         const { data: profilesData, error: profilesError } = await supabase
           .from('profiles')
-          .select('id, full_name, email, created_at');
+          .select('id, full_name, created_at');
           
         if (profilesError) throw profilesError;
         
-        setUsers(profilesData?.map(profile => ({
-          id: profile.id,
-          email: profile.email || '',
-          user_metadata: { full_name: profile.full_name },
-          created_at: profile.created_at
-        })) || []);
+        setProfileUsers(profilesData || []);
+        setUseProfiles(true);
       } else {
         setUsers(usersData.users || []);
+        setUseProfiles(false);
       }
 
       // Fetch user roles
@@ -122,6 +119,15 @@ export const UserRoleManager = () => {
     );
   }
 
+  const displayUsers = useProfiles 
+    ? profileUsers.map(profile => ({
+        id: profile.id,
+        email: `User ${profile.id.slice(0, 8)}...`, // Fallback display
+        user_metadata: { full_name: profile.full_name },
+        created_at: profile.created_at
+      }))
+    : users;
+
   return (
     <Card>
       <CardHeader>
@@ -132,7 +138,7 @@ export const UserRoleManager = () => {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {users.map((user) => (
+          {displayUsers.map((user) => (
             <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
               <div className="flex items-center space-x-3">
                 <div className="p-2 bg-gray-100 rounded-full">
