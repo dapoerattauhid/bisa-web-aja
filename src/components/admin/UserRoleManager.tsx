@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,6 +24,11 @@ interface ProfileData {
   full_name: string | null;
   created_at: string;
   role: string | null;
+}
+
+interface AuthUser {
+  id: string;
+  email?: string;
 }
 
 export const UserRoleManager = () => {
@@ -69,7 +73,7 @@ export const UserRoleManager = () => {
           full_name: profile.full_name,
           created_at: profile.created_at,
           role: profile.role,
-          email: authUsers?.find(user => user.id === profile.id)?.email || null
+          email: (authUsers as AuthUser[] | undefined)?.find((user: AuthUser) => user.id === profile.id)?.email || null
         }));
       }
       
