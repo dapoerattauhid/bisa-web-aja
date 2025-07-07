@@ -20,6 +20,13 @@ interface ProfileUser {
   email?: string | null; // Email will be fetched separately
 }
 
+interface ProfileData {
+  id: string;
+  full_name: string | null;
+  created_at: string;
+  role: string | null;
+}
+
 export const UserRoleManager = () => {
   const [profileUsers, setProfileUsers] = useState<ProfileUser[]>([]);
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
@@ -57,7 +64,7 @@ export const UserRoleManager = () => {
       let combinedUsers: ProfileUser[] = [];
       
       if (profilesData && Array.isArray(profilesData)) {
-        combinedUsers = profilesData.map((profile) => ({
+        combinedUsers = (profilesData as ProfileData[]).map((profile: ProfileData) => ({
           id: profile.id,
           full_name: profile.full_name,
           created_at: profile.created_at,
