@@ -14,6 +14,7 @@ import OrderRecap from '@/pages/admin/OrderRecap';
 import Reports from '@/pages/admin/Reports';
 import ScheduleManagement from '@/pages/admin/ScheduleManagement';
 import PopulateDailyMenus from '@/pages/admin/PopulateDailyMenus';
+import UserManagement from '@/pages/admin/UserManagement';
 import MidtransScript from '@/components/MidtransScript';
 import CashierDashboard from '@/pages/cashier/CashierDashboard';
 import CashierReports from '@/pages/cashier/CashierReports';
@@ -80,6 +81,7 @@ function AppContent() {
                     <Route path="/admin/reports" element={<><Navbar /><Reports /></>} />
                     <Route path="/admin/schedule-management" element={<><Navbar /><ScheduleManagement /></>} />
                     <Route path="/admin/populate-daily-menus" element={<><Navbar /><PopulateDailyMenus /></>} />
+                    <Route path="/admin/user-management" element={<><Navbar /><UserManagement /></>} />
                   </>
                 )}
                 

@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
@@ -12,6 +13,7 @@ import { Utensils } from 'lucide-react';
 
 const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
+  const [registrationRole, setRegistrationRole] = useState('parent');
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
 
@@ -23,23 +25,32 @@ const Auth = () => {
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
 
-    const { error } = await signIn(email, password);
-    
-    if (error) {
+    try {
+      const { error } = await signIn(email, password);
+      
+      if (error) {
+        toast({
+          title: "Error",
+          description: error.message || "Login gagal",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Berhasil!",
+          description: "Login berhasil. Selamat datang!",
+        });
+        navigate('/');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
       toast({
         title: "Error",
-        description: error.message,
+        description: "Terjadi kesalahan saat login",
         variant: "destructive",
       });
-    } else {
-      toast({
-        title: "Berhasil!",
-        description: "Login berhasil. Selamat datang!",
-      });
-      navigate('/');
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   };
 
   const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -53,35 +64,44 @@ const Auth = () => {
     const phone = formData.get('phone') as string;
     const address = formData.get('address') as string;
 
-    const { error } = await signUp(email, password, {
-      full_name: fullName,
-      phone: phone,
-      address: address,
-      role: 'parent'
-    });
-    
-    if (error) {
-      if (error.message.includes('already registered')) {
-        toast({
-          title: "Error",
-          description: "Email sudah terdaftar. Silakan login atau gunakan email lain.",
-          variant: "destructive",
-        });
+    try {
+      const { error } = await signUp(email, password, {
+        full_name: fullName,
+        phone: phone,
+        address: address,
+        role: registrationRole
+      });
+      
+      if (error) {
+        if (error.message.includes('already registered')) {
+          toast({
+            title: "Error",
+            description: "Email sudah terdaftar. Silakan login atau gunakan email lain.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Error",
+            description: error.message || "Registrasi gagal",
+            variant: "destructive",
+          });
+        }
       } else {
         toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive",
+          title: "Berhasil!",
+          description: "Akun berhasil dibuat. Silakan cek email untuk verifikasi.",
         });
       }
-    } else {
+    } catch (error) {
+      console.error('Registration error:', error);
       toast({
-        title: "Berhasil!",
-        description: "Akun berhasil dibuat. Silakan cek email untuk verifikasi.",
+        title: "Error",
+        description: "Terjadi kesalahan saat registrasi",
+        variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   };
 
   return (
@@ -178,6 +198,19 @@ const Auth = () => {
                     type="text" 
                     placeholder="masukkan alamat"
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="role">Role</Label>
+                  <Select value={registrationRole} onValueChange={setRegistrationRole}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="parent">Parent</SelectItem>
+                      <SelectItem value="cashier">Kasir</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
