@@ -53,11 +53,11 @@ export const UserRoleManager = () => {
         // Continue without emails if we can't fetch them
       }
       
-      // Combine the data
-      const combinedUsers = (profilesData || []).map(profile => ({
+      // Combine the data with proper type checking
+      const combinedUsers: ProfileUser[] = profilesData ? profilesData.map(profile => ({
         ...profile,
         email: authUsers?.find(user => user.id === profile.id)?.email || null
-      }));
+      })) : [];
       
       setProfileUsers(combinedUsers);
 
