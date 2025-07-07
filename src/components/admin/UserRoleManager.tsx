@@ -6,7 +6,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Users, Shield, UserCheck } from 'lucide-react';
-import type { User } from '@supabase/supabase-js';
 
 interface UserRole {
   user_id: string;
@@ -16,15 +15,15 @@ interface UserRole {
 interface ProfileUser {
   id: string;
   full_name: string | null;
+  email: string | null;
   created_at: string;
+  role: string | null;
 }
 
 export const UserRoleManager = () => {
-  const [users, setUsers] = useState<User[]>([]);
   const [profileUsers, setProfileUsers] = useState<ProfileUser[]>([]);
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
   const [loading, setLoading] = useState(true);
-  const [useProfiles, setUseProfiles] = useState(false);
 
   useEffect(() => {
     fetchUsersAndRoles();
@@ -32,37 +31,38 @@ export const UserRoleManager = () => {
 
   const fetchUsersAndRoles = async () => {
     try {
-      // Try to fetch users from auth.users (admin only)
-      const { data: usersData, error: usersError } = await supabase.auth.admin.listUsers();
+      console.log('Fetching users and roles...');
       
-      if (usersError) {
-        console.error('Error fetching users from auth:', usersError);
-        // Fallback: fetch from profiles table
-        const { data: profilesData, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, full_name, created_at');
-          
-        if (profilesError) throw profilesError;
+      // Fetch from profiles table instead of auth.users for better compatibility
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, created_at, role');
         
-        setProfileUsers(profilesData || []);
-        setUseProfiles(true);
-      } else {
-        setUsers(usersData.users || []);
-        setUseProfiles(false);
+      if (profilesError) {
+        console.error('Error fetching profiles:', profilesError);
+        throw profilesError;
       }
+      
+      console.log('Profiles data:', profilesData);
+      setProfileUsers(profilesData || []);
 
       // Fetch user roles
       const { data: rolesData, error: rolesError } = await supabase
         .from('user_roles')
         .select('user_id, role');
 
-      if (rolesError) throw rolesError;
+      if (rolesError) {
+        console.error('Error fetching roles:', rolesError);
+        throw rolesError;
+      }
+      
+      console.log('Roles data:', rolesData);
       setUserRoles(rolesData || []);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast({
         title: "Error",
-        description: "Gagal memuat data pengguna",
+        description: "Gagal memuat data pengguna. Pastikan Anda memiliki akses admin.",
         variant: "destructive",
       });
     } finally {
@@ -72,18 +72,28 @@ export const UserRoleManager = () => {
 
   const updateUserRole = async (userId: string, newRole: string) => {
     try {
+      console.log('Updating role for user:', userId, 'to:', newRole);
+      
       // Update or insert user role
-      const { error } = await supabase
+      const { error: roleError } = await supabase
         .from('user_roles')
         .upsert({ user_id: userId, role: newRole });
 
-      if (error) throw error;
+      if (roleError) {
+        console.error('Error updating user_roles:', roleError);
+        throw roleError;
+      }
 
       // Update profiles table as well
-      await supabase
+      const { error: profileError } = await supabase
         .from('profiles')
         .update({ role: newRole })
         .eq('id', userId);
+
+      if (profileError) {
+        console.error('Error updating profiles:', profileError);
+        throw profileError;
+      }
 
       toast({
         title: "Berhasil",
@@ -104,7 +114,8 @@ export const UserRoleManager = () => {
 
   const getUserRole = (userId: string) => {
     const userRole = userRoles.find(role => role.user_id === userId);
-    return userRole?.role || 'parent';
+    const profileRole = profileUsers.find(user => user.id === userId)?.role;
+    return userRole?.role || profileRole || 'parent';
   };
 
   if (loading) {
@@ -119,15 +130,6 @@ export const UserRoleManager = () => {
     );
   }
 
-  const displayUsers = useProfiles 
-    ? profileUsers.map(profile => ({
-        id: profile.id,
-        email: `User ${profile.id.slice(0, 8)}...`, // Fallback display
-        user_metadata: { full_name: profile.full_name },
-        created_at: profile.created_at
-      }))
-    : users;
-
   return (
     <Card>
       <CardHeader>
@@ -138,42 +140,53 @@ export const UserRoleManager = () => {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {displayUsers.map((user) => (
-            <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-gray-100 rounded-full">
-                  {getUserRole(user.id) === 'admin' ? (
-                    <Shield className="h-4 w-4 text-red-600" />
-                  ) : getUserRole(user.id) === 'cashier' ? (
-                    <UserCheck className="h-4 w-4 text-blue-600" />
-                  ) : (
-                    <Users className="h-4 w-4 text-gray-600" />
-                  )}
-                </div>
-                <div>
-                  <p className="font-medium">
-                    {user.user_metadata?.full_name || user.email}
-                  </p>
-                  <p className="text-sm text-gray-500">{user.email}</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Select
-                  value={getUserRole(user.id)}
-                  onValueChange={(newRole) => updateUserRole(user.id, newRole)}
-                >
-                  <SelectTrigger className="w-32">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="parent">Parent</SelectItem>
-                    <SelectItem value="cashier">Kasir</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+          {profileUsers.length === 0 ? (
+            <div className="text-center p-4 text-gray-500">
+              Tidak ada data pengguna. Pastikan Anda memiliki akses admin.
             </div>
-          ))}
+          ) : (
+            profileUsers.map((user) => (
+              <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-gray-100 rounded-full">
+                    {getUserRole(user.id) === 'admin' ? (
+                      <Shield className="h-4 w-4 text-red-600" />
+                    ) : getUserRole(user.id) === 'cashier' ? (
+                      <UserCheck className="h-4 w-4 text-blue-600" />
+                    ) : (
+                      <Users className="h-4 w-4 text-gray-600" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="font-medium">
+                      {user.full_name || user.email || `User ${user.id.slice(0, 8)}`}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {user.email || `ID: ${user.id.slice(0, 8)}...`}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      Role saat ini: {getUserRole(user.id)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Select
+                    value={getUserRole(user.id)}
+                    onValueChange={(newRole) => updateUserRole(user.id, newRole)}
+                  >
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="parent">Parent</SelectItem>
+                      <SelectItem value="cashier">Kasir</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </CardContent>
     </Card>
