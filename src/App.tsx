@@ -3,12 +3,10 @@ import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Navbar } from '@/components/Navbar';
-import Home from '@/pages/Index';
-import Menu from '@/pages/Index';
+import Index from '@/pages/Index';
 import Orders from '@/pages/Orders';
 import Children from '@/pages/Children';
-import Login from '@/pages/Auth';
-import Register from '@/pages/Auth';
+import Auth from '@/pages/Auth';
 import AdminDashboard from '@/pages/admin/AdminDashboard';
 import FoodManagement from '@/pages/admin/FoodManagement';
 import OrderManagement from '@/pages/admin/OrderManagement';
@@ -21,7 +19,7 @@ import CashierDashboard from '@/pages/cashier/CashierDashboard';
 import CashierReports from '@/pages/cashier/CashierReports';
 import { useUserRole } from '@/hooks/useUserRole';
 
-function App() {
+function AppContent() {
   const { user, loading: authLoading } = useAuth();
   const { role: userRole, loading: roleLoading } = useUserRole();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -34,7 +32,9 @@ function App() {
     const location = useLocation();
   
     if (authLoading || roleLoading) {
-      return <div>Loading...</div>;
+      return <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-orange-500"></div>
+      </div>;
     }
   
     if (!isLoggedIn) {
@@ -45,59 +45,67 @@ function App() {
   };
 
   if (authLoading || roleLoading) {
-    return <div>Loading...</div>;
+    return <div className="flex justify-center items-center min-h-screen">
+      <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-orange-500"></div>
+    </div>;
   }
 
   return (
+    <div className="min-h-screen bg-gray-50">
+      <MidtransScript />
+      <Routes>
+        {/* Public routes */}
+        <Route path="/login" element={<Auth />} />
+        <Route path="/register" element={<Auth />} />
+        <Route path="/menu" element={<><Navbar /><Index /></>} />
+        
+        {/* Protected routes */}
+        <Route
+          path="/*"
+          element={
+            <ProtectedRoute>
+              <Routes>
+                {/* Parent routes */}
+                <Route path="/" element={<><Navbar /><Index /></>} />
+                <Route path="/orders" element={<><Navbar /><Orders /></>} />
+                <Route path="/children" element={<><Navbar /><Children /></>} />
+                
+                {/* Admin routes */}
+                {userRole === 'admin' && (
+                  <>
+                    <Route path="/admin" element={<><Navbar /><AdminDashboard /></>} />
+                    <Route path="/admin/food-management" element={<><Navbar /><FoodManagement /></>} />
+                    <Route path="/admin/order-management" element={<><Navbar /><OrderManagement /></>} />
+                    <Route path="/admin/order-recap" element={<><Navbar /><OrderRecap /></>} />
+                    <Route path="/admin/reports" element={<><Navbar /><Reports /></>} />
+                    <Route path="/admin/schedule-management" element={<><Navbar /><ScheduleManagement /></>} />
+                    <Route path="/admin/populate-daily-menus" element={<><Navbar /><PopulateDailyMenus /></>} />
+                  </>
+                )}
+                
+                {/* Cashier routes */}
+                {userRole === 'cashier' && (
+                  <>
+                    <Route path="/cashier" element={<><Navbar /><CashierDashboard /></>} />
+                    <Route path="/cashier/reports" element={<><Navbar /><CashierReports /></>} />
+                  </>
+                )}
+                
+                {/* Default route */}
+                <Route path="*" element={<Navigate to="/" />} />
+              </Routes>
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    </div>
+  );
+}
+
+function App() {
+  return (
     <Router>
-      <div className="min-h-screen bg-gray-50">
-        <MidtransScript />
-        <Routes>
-          {/* Public routes */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/menu" element={<><Navbar /><Menu /></>} />
-          
-          {/* Protected routes */}
-          <Route
-            path="/*"
-            element={
-              <ProtectedRoute>
-                <Routes>
-                  {/* Parent routes */}
-                  <Route path="/" element={<><Navbar /><Home /></>} />
-                  <Route path="/orders" element={<><Navbar /><Orders /></>} />
-                  <Route path="/children" element={<><Navbar /><Children /></>} />
-                  
-                  {/* Admin routes */}
-                  {userRole === 'admin' && (
-                    <>
-                      <Route path="/admin" element={<><Navbar /><AdminDashboard /></>} />
-                      <Route path="/admin/food-management" element={<><Navbar /><FoodManagement /></>} />
-                      <Route path="/admin/order-management" element={<><Navbar /><OrderManagement /></>} />
-                      <Route path="/admin/order-recap" element={<><Navbar /><OrderRecap /></>} />
-                      <Route path="/admin/reports" element={<><Navbar /><Reports /></>} />
-                      <Route path="/admin/schedule-management" element={<><Navbar /><ScheduleManagement /></>} />
-                      <Route path="/admin/populate-daily-menus" element={<><Navbar /><PopulateDailyMenus /></>} />
-                    </>
-                  )}
-                  
-                  {/* Cashier routes */}
-                  {userRole === 'cashier' && (
-                    <>
-                      <Route path="/cashier" element={<><Navbar /><CashierDashboard /></>} />
-                      <Route path="/cashier/reports" element={<><Navbar /><CashierReports /></>} />
-                    </>
-                  )}
-                  
-                  {/* Default route */}
-                  <Route path="*" element={<Navigate to="/" />} />
-                </Routes>
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
-      </div>
+      <AppContent />
     </Router>
   );
 }
