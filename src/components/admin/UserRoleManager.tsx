@@ -54,10 +54,17 @@ export const UserRoleManager = () => {
       }
       
       // Combine the data with proper type checking
-      const combinedUsers: ProfileUser[] = profilesData ? profilesData.map(profile => ({
-        ...profile,
-        email: authUsers?.find(user => user.id === profile.id)?.email || null
-      })) : [];
+      let combinedUsers: ProfileUser[] = [];
+      
+      if (profilesData && Array.isArray(profilesData)) {
+        combinedUsers = profilesData.map((profile) => ({
+          id: profile.id,
+          full_name: profile.full_name,
+          created_at: profile.created_at,
+          role: profile.role,
+          email: authUsers?.find(user => user.id === profile.id)?.email || null
+        }));
+      }
       
       setProfileUsers(combinedUsers);
 
