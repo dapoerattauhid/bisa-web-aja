@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -51,6 +50,9 @@ export const CashPayment: React.FC<CashPaymentProps> = ({ order, onPaymentComple
     setLoading(true);
 
     try {
+      // Generate transaction ID for cash payment
+      const transactionId = `CASH-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
       // Update order payment status
       const { error: orderError } = await supabase
         .from('orders')
@@ -69,7 +71,8 @@ export const CashPayment: React.FC<CashPaymentProps> = ({ order, onPaymentComple
           order_id: order.id,
           amount: order.total_amount,
           payment_method: 'cash',
-          status: 'completed'
+          status: 'completed',
+          transaction_id: transactionId
         });
 
       if (paymentError) throw paymentError;
