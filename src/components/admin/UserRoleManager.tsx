@@ -15,9 +15,9 @@ interface UserRole {
 interface ProfileUser {
   id: string;
   full_name: string | null;
-  email: string | null;
   created_at: string;
   role: string | null;
+  email?: string | null; // Email will be fetched separately
 }
 
 export const UserRoleManager = () => {
@@ -33,10 +33,10 @@ export const UserRoleManager = () => {
     try {
       console.log('Fetching users and roles...');
       
-      // Fetch from profiles table instead of auth.users for better compatibility
+      // First, fetch from profiles table (without email)
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, full_name, email, created_at, role');
+        .select('id, full_name, created_at, role');
         
       if (profilesError) {
         console.error('Error fetching profiles:', profilesError);
@@ -44,7 +44,22 @@ export const UserRoleManager = () => {
       }
       
       console.log('Profiles data:', profilesData);
-      setProfileUsers(profilesData || []);
+      
+      // Then fetch auth users to get emails
+      const { data: { users: authUsers }, error: authError } = await supabase.auth.admin.listUsers();
+      
+      if (authError) {
+        console.error('Error fetching auth users:', authError);
+        // Continue without emails if we can't fetch them
+      }
+      
+      // Combine the data
+      const combinedUsers = (profilesData || []).map(profile => ({
+        ...profile,
+        email: authUsers?.find(user => user.id === profile.id)?.email || null
+      }));
+      
+      setProfileUsers(combinedUsers);
 
       // Fetch user roles
       const { data: rolesData, error: rolesError } = await supabase
