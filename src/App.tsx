@@ -1,13 +1,14 @@
+
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Navbar } from '@/components/Navbar';
-import Home from '@/pages/Home';
-import Menu from '@/pages/Menu';
+import Home from '@/pages/Index';
+import Menu from '@/pages/Index';
 import Orders from '@/pages/Orders';
 import Children from '@/pages/Children';
-import Login from '@/pages/Login';
-import Register from '@/pages/Register';
+import Login from '@/pages/Auth';
+import Register from '@/pages/Auth';
 import AdminDashboard from '@/pages/admin/AdminDashboard';
 import FoodManagement from '@/pages/admin/FoodManagement';
 import OrderManagement from '@/pages/admin/OrderManagement';
@@ -15,14 +16,14 @@ import OrderRecap from '@/pages/admin/OrderRecap';
 import Reports from '@/pages/admin/Reports';
 import ScheduleManagement from '@/pages/admin/ScheduleManagement';
 import PopulateDailyMenus from '@/pages/admin/PopulateDailyMenus';
-import { MidtransScript } from '@/components/MidtransScript';
+import MidtransScript from '@/components/MidtransScript';
 import CashierDashboard from '@/pages/cashier/CashierDashboard';
 import CashierReports from '@/pages/cashier/CashierReports';
 import { useUserRole } from '@/hooks/useUserRole';
 
 function App() {
   const { user, loading: authLoading } = useAuth();
-  const { data: userRole, isLoading: roleLoading } = useUserRole();
+  const { role: userRole, loading: roleLoading } = useUserRole();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {

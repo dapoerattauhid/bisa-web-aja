@@ -62,16 +62,14 @@ export const CashPayment: React.FC<CashPaymentProps> = ({ order, onPaymentComple
 
       if (orderError) throw orderError;
 
-      // Record cash payment
+      // Record cash payment in payments table
       const { error: paymentError } = await supabase
-        .from('cash_payments')
+        .from('payments')
         .insert({
           order_id: order.id,
           amount: order.total_amount,
-          received_amount: parseFloat(receivedAmount),
-          change_amount: Math.max(0, changeAmount),
-          cashier_id: (await supabase.auth.getUser()).data.user?.id,
-          notes: notes || null
+          payment_method: 'cash',
+          status: 'completed'
         });
 
       if (paymentError) throw paymentError;

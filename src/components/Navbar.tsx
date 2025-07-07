@@ -1,3 +1,4 @@
+
 import React from 'react';
 import {
   Home,
@@ -22,11 +23,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useAuth } from '@/hooks/useAuth';
+import { useUserRole } from '@/hooks/useUserRole';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 export const Navbar = () => {
   const { user, signOut } = useAuth();
-  const { data: userRole } = useUserRole();
+  const { role: userRole } = useUserRole();
   const navigate = useNavigate();
   const location = useLocation();
 

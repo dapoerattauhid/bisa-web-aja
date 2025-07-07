@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PrintButton } from '@/components/ui/print-button';
@@ -13,10 +12,8 @@ import { Calendar, DollarSign, Receipt, TrendingUp } from 'lucide-react';
 interface CashPayment {
   id: string;
   amount: number;
-  received_amount: number;
-  change_amount: number;
   created_at: string;
-  notes: string | null;
+  order_id: string;
   orders: {
     child_name: string;
     child_class: string;
@@ -57,7 +54,7 @@ const CashierReports = () => {
   const fetchCashPayments = async () => {
     try {
       const { data, error } = await supabase
-        .from('cash_payments')
+        .from('payments')
         .select(`
           *,
           orders (
@@ -65,6 +62,7 @@ const CashierReports = () => {
             child_class
           )
         `)
+        .eq('payment_method', 'cash')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -116,7 +114,7 @@ const CashierReports = () => {
       }
 
       dailyData[date].totalAmount += payment.amount;
-      dailyData[date].totalPayments += payment.received_amount;
+      dailyData[date].totalPayments += payment.amount;
       dailyData[date].transactionCount += 1;
     });
 
@@ -128,8 +126,8 @@ const CashierReports = () => {
   const totalStats = {
     totalTransactions: filteredPayments.length,
     totalAmount: filteredPayments.reduce((sum, payment) => sum + payment.amount, 0),
-    totalReceived: filteredPayments.reduce((sum, payment) => sum + payment.received_amount, 0),
-    totalChange: filteredPayments.reduce((sum, payment) => sum + payment.change_amount, 0)
+    totalReceived: filteredPayments.reduce((sum, payment) => sum + payment.amount, 0),
+    totalChange: 0 // Simplified for now since we don't have change tracking
   };
 
   const handlePrint = () => {
@@ -214,8 +212,6 @@ const CashierReports = () => {
                 <th>Nama Anak</th>
                 <th>Kelas</th>
                 <th style="text-align: right;">Total</th>
-                <th style="text-align: right;">Diterima</th>
-                <th style="text-align: right;">Kembalian</th>
               </tr>
             </thead>
             <tbody>
@@ -226,8 +222,6 @@ const CashierReports = () => {
                   <td>${payment.orders?.child_name || 'Unknown'}</td>
                   <td>${payment.orders?.child_class || 'Unknown'}</td>
                   <td style="text-align: right;">${formatPrice(payment.amount)}</td>
-                  <td style="text-align: right;">${formatPrice(payment.received_amount)}</td>
-                  <td style="text-align: right;">${formatPrice(payment.change_amount)}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -235,8 +229,6 @@ const CashierReports = () => {
               <tr class="bg-gray-50" style="font-weight: bold;">
                 <td colspan="4" style="text-align: right;">Total:</td>
                 <td style="text-align: right;">${formatPrice(totalStats.totalAmount)}</td>
-                <td style="text-align: right;">${formatPrice(totalStats.totalReceived)}</td>
-                <td style="text-align: right;">${formatPrice(totalStats.totalChange)}</td>
               </tr>
             </tfoot>
           </table>
@@ -397,18 +389,9 @@ const CashierReports = () => {
                   <p className="text-sm text-gray-600">
                     {payment.orders?.child_class} • {formatDate(payment.created_at)}
                   </p>
-                  {payment.notes && (
-                    <p className="text-sm text-gray-500 mt-1">Catatan: {payment.notes}</p>
-                  )}
                 </div>
                 <div className="text-right">
                   <p className="font-bold">{formatPrice(payment.amount)}</p>
-                  <p className="text-sm text-gray-600">
-                    Diterima: {formatPrice(payment.received_amount)}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    Kembalian: {formatPrice(payment.change_amount)}
-                  </p>
                 </div>
               </div>
             ))}

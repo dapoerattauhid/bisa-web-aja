@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -108,8 +107,9 @@ const CashierDashboard = () => {
 
       // Get today's cash payments
       const { data: cashPayments, error: cashError } = await supabase
-        .from('cash_payments')
+        .from('payments')
         .select('*')
+        .eq('payment_method', 'cash')
         .gte('created_at', today + 'T00:00:00')
         .lt('created_at', today + 'T23:59:59');
 
