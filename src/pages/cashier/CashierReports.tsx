@@ -72,22 +72,29 @@ const CashierReports = () => {
   const fetchCashPayments = async () => {
     try {
       const { data, error } = await supabase
-        .from('payments')
+        .from('orders')
         .select(`
-          *,
-          orders (
-            child_name,
-            child_class
-          )
+          id,
+          child_name,
+          child_class,
+          total_amount,
+          created_at,
+          payment_status
         `)
-        .eq('payment_method', 'cash')
+        .eq('payment_status', 'paid')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      const transformedPayments = (data || []).map(payment => ({
-        ...payment,
-        orders: payment.orders || { child_name: 'Unknown', child_class: 'Unknown' }
+      const transformedPayments = (data || []).map(order => ({
+        id: order.id,
+        amount: order.total_amount,
+        created_at: order.created_at,
+        order_id: order.id,
+        orders: {
+          child_name: order.child_name,
+          child_class: order.child_class
+        }
       }));
 
       setCashPayments(transformedPayments);
