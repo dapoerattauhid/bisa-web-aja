@@ -71,31 +71,42 @@ const CashierReports = () => {
 
   const fetchCashPayments = async () => {
     try {
+      // Fetch all orders with payment status paid instead of just cash payments
+      // This is because cash payments might not be properly recorded in payments table
       const { data, error } = await supabase
-        .from('payments')
+        .from('orders')
         .select(`
-          *,
-          orders (
-            child_name,
-            child_class
-          )
+          id,
+          total_amount,
+          created_at,
+          child_name,
+          child_class,
+          payment_status,
+          payment_method
         `)
-        .eq('payment_method', 'cash')
+        .eq('payment_status', 'paid')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      const transformedPayments = (data || []).map(payment => ({
-        ...payment,
-        orders: payment.orders || { child_name: 'Unknown', child_class: 'Unknown' }
+      // Transform orders to match CashPayment interface
+      const transformedPayments = (data || []).map(order => ({
+        id: order.id,
+        amount: order.total_amount,
+        created_at: order.created_at,
+        order_id: order.id,
+        orders: {
+          child_name: order.child_name || 'Unknown',
+          child_class: order.child_class || 'Unknown'
+        }
       }));
 
       setCashPayments(transformedPayments);
     } catch (error) {
-      console.error('Error fetching cash payments:', error);
+      console.error('Error fetching payment data:', error);
       toast({
         title: "Error",
-        description: "Gagal memuat data pembayaran tunai",
+        description: "Gagal memuat data transaksi",
         variant: "destructive",
       });
     } finally {
