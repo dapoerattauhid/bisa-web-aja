@@ -26,6 +26,9 @@ interface OrderRecapData {
 const OrderRecap = () => {
   const [orders, setOrders] = useState<OrderRecapData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [groupedMenuItems, setGroupedMenuItems] = useState<{ name: string; quantity: number; totalPrice: number }[]>([]);
+  const [ordersByDate, setOrdersByDate] = useState<Record<string, OrderRecapData[]>>({});
+  const [ordersByClass, setOrdersByClass] = useState<Record<string, OrderRecapData[]>>({});
 
   useEffect(() => {
     fetchOrderRecap();
@@ -55,6 +58,7 @@ const OrderRecap = () => {
       if (error) throw error;
       
       setOrders(data || []);
+      processOrderData(data || []);
     } catch (error) {
       console.error('Error fetching order recap:', error);
       toast({
@@ -65,6 +69,57 @@ const OrderRecap = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const processOrderData = (orderData: OrderRecapData[]) => {
+    // Process grouped menu items
+    const allMenuItems = orderData.flatMap(order => 
+      order.order_items.map(item => ({
+        name: item.menu_items.name,
+        quantity: item.quantity,
+        price: item.price
+      }))
+    );
+
+    const grouped = allMenuItems.reduce((acc, item) => {
+      const existing = acc.find(i => i.name === item.name);
+      if (existing) {
+        existing.quantity += item.quantity;
+        existing.totalPrice += item.price * item.quantity;
+      } else {
+        acc.push({
+          name: item.name,
+          quantity: item.quantity,
+          totalPrice: item.price * item.quantity
+        });
+      }
+      return acc;
+    }, [] as { name: string; quantity: number; totalPrice: number }[]);
+
+    setGroupedMenuItems(grouped);
+
+    // Process orders by date
+    const byDate = orderData.reduce((acc, order) => {
+      const date = formatDate(order.created_at);
+      if (!acc[date]) {
+        acc[date] = [];
+      }
+      acc[date].push(order);
+      return acc;
+    }, {} as Record<string, OrderRecapData[]>);
+
+    setOrdersByDate(byDate);
+
+    // Process orders by class
+    const byClass = orderData.reduce((acc, order) => {
+      if (!acc[order.child_class]) {
+        acc[order.child_class] = [];
+      }
+      acc[order.child_class].push(order);
+      return acc;
+    }, {} as Record<string, OrderRecapData[]>);
+
+    setOrdersByClass(byClass);
   };
 
   const handlePrint = () => {
@@ -276,31 +331,225 @@ const OrderRecap = () => {
         <PrintButton onPrint={handlePrint} />
       </div>
 
-      <div className="space-y-4">
-        {orders.map((order) => (
-          <Card key={order.id}>
-            <CardHeader>
-              <CardTitle>{order.child_name}</CardTitle>
-              <CardDescription>
-                Kelas {order.child_class} • {formatDate(order.created_at)}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {order.order_items.map((item) => (
-                  <div key={item.id} className="flex justify-between">
-                    <span>{item.menu_items.name} x{item.quantity}</span>
-                    <span>{formatPrice(item.price * item.quantity)}</span>
-                  </div>
+      {/* Rekapitulasi Menu (Gabungan) */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Rekapitulasi Menu (Gabungan Semua Kelas)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="min-w-full border-collapse border border-gray-300">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="border border-gray-300 px-4 py-2 text-left">No</th>
+                  <th className="border border-gray-300 px-4 py-2 text-left">Nama Menu</th>
+                  <th className="border border-gray-300 px-4 py-2 text-center">Jumlah</th>
+                  <th className="border border-gray-300 px-4 py-2 text-right">Total Harga</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groupedMenuItems.map((item, index) => (
+                  <tr key={item.name}>
+                    <td className="border border-gray-300 px-4 py-2">{index + 1}</td>
+                    <td className="border border-gray-300 px-4 py-2">{item.name}</td>
+                    <td className="border border-gray-300 px-4 py-2 text-center">{item.quantity}</td>
+                    <td className="border border-gray-300 px-4 py-2 text-right">{formatPrice(item.totalPrice)}</td>
+                  </tr>
                 ))}
-                <div className="border-t pt-2 font-bold">
-                  Total: {formatPrice(order.total_amount)}
+              </tbody>
+              <tfoot>
+                <tr className="bg-gray-100 font-bold">
+                  <td className="border border-gray-300 px-4 py-2" colSpan={2}>Total:</td>
+                  <td className="border border-gray-300 px-4 py-2 text-center">
+                    {groupedMenuItems.reduce((sum, item) => sum + item.quantity, 0)}
+                  </td>
+                  <td className="border border-gray-300 px-4 py-2 text-right">
+                    {formatPrice(groupedMenuItems.reduce((sum, item) => sum + item.totalPrice, 0))}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Rekapitulasi per Tanggal */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Rekapitulasi per Tanggal</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {Object.entries(ordersByDate).map(([date, dateOrders]) => {
+              const dateMenuItems = dateOrders.flatMap(order => 
+                order.order_items.map(item => ({
+                  name: item.menu_items.name,
+                  quantity: item.quantity,
+                  price: item.price
+                }))
+              );
+
+              const groupedDateItems = dateMenuItems.reduce((acc, item) => {
+                const existing = acc.find(i => i.name === item.name);
+                if (existing) {
+                  existing.quantity += item.quantity;
+                  existing.totalPrice += item.price * item.quantity;
+                } else {
+                  acc.push({
+                    name: item.name,
+                    quantity: item.quantity,
+                    totalPrice: item.price * item.quantity
+                  });
+                }
+                return acc;
+              }, [] as { name: string; quantity: number; totalPrice: number }[]);
+
+              return (
+                <div key={date} className="border rounded-lg p-4">
+                  <h3 className="font-bold text-lg mb-3">{date}</h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full border-collapse border border-gray-300">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="border border-gray-300 px-4 py-2 text-left">Nama Menu</th>
+                          <th className="border border-gray-300 px-4 py-2 text-center">Jumlah</th>
+                          <th className="border border-gray-300 px-4 py-2 text-right">Total Harga</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {groupedDateItems.map((item) => (
+                          <tr key={item.name}>
+                            <td className="border border-gray-300 px-4 py-2">{item.name}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-center">{item.quantity}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right">{formatPrice(item.totalPrice)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-gray-100 font-bold">
+                          <td className="border border-gray-300 px-4 py-2">Total:</td>
+                          <td className="border border-gray-300 px-4 py-2 text-center">
+                            {groupedDateItems.reduce((sum, item) => sum + item.quantity, 0)}
+                          </td>
+                          <td className="border border-gray-300 px-4 py-2 text-right">
+                            {formatPrice(groupedDateItems.reduce((sum, item) => sum + item.totalPrice, 0))}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Rekapitulasi per Kelas */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Rekapitulasi per Kelas</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {Object.entries(ordersByClass).map(([className, classOrders]) => {
+              const classMenuItems = classOrders.flatMap(order => 
+                order.order_items.map(item => ({
+                  name: item.menu_items.name,
+                  quantity: item.quantity,
+                  price: item.price
+                }))
+              );
+
+              const groupedClassItems = classMenuItems.reduce((acc, item) => {
+                const existing = acc.find(i => i.name === item.name);
+                if (existing) {
+                  existing.quantity += item.quantity;
+                  existing.totalPrice += item.price * item.quantity;
+                } else {
+                  acc.push({
+                    name: item.name,
+                    quantity: item.quantity,
+                    totalPrice: item.price * item.quantity
+                  });
+                }
+                return acc;
+              }, [] as { name: string; quantity: number; totalPrice: number }[]);
+
+              return (
+                <div key={className} className="border rounded-lg p-4">
+                  <h3 className="font-bold text-lg mb-3">Kelas {className}</h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full border-collapse border border-gray-300">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="border border-gray-300 px-4 py-2 text-left">Nama Menu</th>
+                          <th className="border border-gray-300 px-4 py-2 text-center">Jumlah</th>
+                          <th className="border border-gray-300 px-4 py-2 text-right">Total Harga</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {groupedClassItems.map((item) => (
+                          <tr key={item.name}>
+                            <td className="border border-gray-300 px-4 py-2">{item.name}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-center">{item.quantity}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right">{formatPrice(item.totalPrice)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-gray-100 font-bold">
+                          <td className="border border-gray-300 px-4 py-2">Total:</td>
+                          <td className="border border-gray-300 px-4 py-2 text-center">
+                            {groupedClassItems.reduce((sum, item) => sum + item.quantity, 0)}
+                          </td>
+                          <td className="border border-gray-300 px-4 py-2 text-right">
+                            {formatPrice(groupedClassItems.reduce((sum, item) => sum + item.totalPrice, 0))}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Detail Pesanan Individual */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Detail Pesanan Individual</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {orders.map((order) => (
+              <Card key={order.id}>
+                <CardHeader>
+                  <CardTitle>{order.child_name}</CardTitle>
+                  <CardDescription>
+                    Kelas {order.child_class} • {formatDate(order.created_at)}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {order.order_items.map((item) => (
+                      <div key={item.id} className="flex justify-between">
+                        <span>{item.menu_items.name} x{item.quantity}</span>
+                        <span>{formatPrice(item.price * item.quantity)}</span>
+                      </div>
+                    ))}
+                    <div className="border-t pt-2 font-bold">
+                      Total: {formatPrice(order.total_amount)}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {orders.length === 0 && (
         <Card className="text-center py-12">
