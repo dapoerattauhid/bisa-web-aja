@@ -6,6 +6,13 @@ import { OrderRecapPrint } from '@/components/print/OrderRecapPrint';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
 import { formatPrice, formatDate } from '@/utils/orderUtils';
+import { usePagination } from '@/hooks/usePagination';
+import { PaginationControls } from '@/components/ui/pagination-controls';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { CalendarIcon, Filter, X } from 'lucide-react';
+import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 interface OrderRecapData {
   id: string;
@@ -25,14 +32,52 @@ interface OrderRecapData {
 
 const OrderRecap = () => {
   const [orders, setOrders] = useState<OrderRecapData[]>([]);
+  const [filteredOrders, setFilteredOrders] = useState<OrderRecapData[]>([]);
   const [loading, setLoading] = useState(true);
   const [groupedMenuItems, setGroupedMenuItems] = useState<{ name: string; quantity: number; totalPrice: number }[]>([]);
   const [ordersByDate, setOrdersByDate] = useState<Record<string, OrderRecapData[]>>({});
   const [ordersByClass, setOrdersByClass] = useState<Record<string, OrderRecapData[]>>({});
+  const [startDate, setStartDate] = useState<Date>();
+  const [endDate, setEndDate] = useState<Date>();
+
+  const pagination = usePagination({
+    data: filteredOrders,
+    itemsPerPage: 10
+  });
 
   useEffect(() => {
     fetchOrderRecap();
   }, []);
+
+  useEffect(() => {
+    applyDateFilter();
+  }, [orders, startDate, endDate]);
+
+  const applyDateFilter = () => {
+    let filtered = [...orders];
+    
+    if (startDate) {
+      filtered = filtered.filter(order => {
+        const orderDate = new Date(order.created_at);
+        return orderDate >= startDate;
+      });
+    }
+    
+    if (endDate) {
+      filtered = filtered.filter(order => {
+        const orderDate = new Date(order.created_at);
+        return orderDate <= endDate;
+      });
+    }
+    
+    setFilteredOrders(filtered);
+    processOrderData(filtered);
+  };
+
+  const clearDateFilter = () => {
+    setStartDate(undefined);
+    setEndDate(undefined);
+  };
 
   const fetchOrderRecap = async () => {
     try {
@@ -321,15 +366,105 @@ const OrderRecap = () => {
 
   return (
     <div className="max-w-7xl mx-auto p-6">
-      <div className="mb-8 flex justify-between items-center">
+      <div className="mb-8 flex justify-between items-start">
         <div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent mb-2">
             Rekap Pesanan
           </h1>
           <p className="text-gray-600">Ringkasan pesanan yang masuk</p>
         </div>
-        <PrintButton onPrint={handlePrint} />
+        <div className="flex gap-4 items-center">
+          <PrintButton onPrint={handlePrint} />
+        </div>
       </div>
+
+      {/* Date Filter */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="h-5 w-5" />
+            Filter Tanggal
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-4 items-center">
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium">Tanggal Mulai</label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-[240px] justify-start text-left font-normal",
+                      !startDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {startDate ? format(startDate, "PPP") : <span>Pilih tanggal</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={startDate}
+                    onSelect={setStartDate}
+                    initialFocus
+                    className="p-3 pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium">Tanggal Akhir</label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-[240px] justify-start text-left font-normal",
+                      !endDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {endDate ? format(endDate, "PPP") : <span>Pilih tanggal</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={endDate}
+                    onSelect={setEndDate}
+                    initialFocus
+                    className="p-3 pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            
+            {(startDate || endDate) && (
+              <Button
+                variant="outline"
+                onClick={clearDateFilter}
+                className="flex items-center gap-2 mt-6"
+              >
+                <X className="h-4 w-4" />
+                Hapus Filter
+              </Button>
+            )}
+          </div>
+          
+          {(startDate || endDate) && (
+            <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+              <p className="text-sm text-blue-700">
+                Menampilkan {filteredOrders.length} pesanan
+                {startDate && ` dari ${format(startDate, "dd/MM/yyyy")}`}
+                {endDate && ` sampai ${format(endDate, "dd/MM/yyyy")}`}
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Rekapitulasi Menu (Gabungan) */}
       <Card className="mb-6">
@@ -524,7 +659,7 @@ const OrderRecap = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {orders.map((order) => (
+            {pagination.paginatedData.map((order) => (
               <Card key={order.id}>
                 <CardHeader>
                   <CardTitle>{order.child_name}</CardTitle>
@@ -548,6 +683,18 @@ const OrderRecap = () => {
               </Card>
             ))}
           </div>
+          
+          <PaginationControls
+            currentPage={pagination.currentPage}
+            totalPages={pagination.totalPages}
+            onPageChange={pagination.goToPage}
+            canGoNext={pagination.canGoNext}
+            canGoPrev={pagination.canGoPrev}
+            startIndex={pagination.startIndex}
+            endIndex={pagination.endIndex}
+            totalItems={pagination.totalItems}
+            itemLabel="pesanan"
+          />
         </CardContent>
       </Card>
 
