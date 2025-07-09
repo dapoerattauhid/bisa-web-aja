@@ -4,12 +4,17 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { getStatusColor, getStatusText, getPaymentStatusColor, getPaymentStatusText, formatPrice, formatDate } from '@/utils/orderUtils';
 import { usePagination } from '@/hooks/usePagination';
 import { PaginationControls } from '@/components/ui/pagination-controls';
-import { Search, Filter } from 'lucide-react';
+import { Search, Filter, Calendar as CalendarIcon, CheckSquare, Square } from 'lucide-react';
+import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 interface OrderItem {
   id: string;
@@ -44,6 +49,10 @@ const OrderManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
+  const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
+  const [bulkStatus, setBulkStatus] = useState<OrderStatus>('confirmed');
+  const [startDate, setStartDate] = useState<Date | undefined>();
+  const [endDate, setEndDate] = useState<Date | undefined>();
 
   // Pagination
   const {
@@ -67,7 +76,7 @@ const OrderManagement = () => {
 
   useEffect(() => {
     filterOrders();
-  }, [orders, searchTerm, statusFilter, paymentFilter]);
+  }, [orders, searchTerm, statusFilter, paymentFilter, startDate, endDate]);
 
   const fetchOrders = async () => {
     try {
@@ -133,6 +142,19 @@ const OrderManagement = () => {
       filtered = filtered.filter(order => order.payment_status === paymentFilter);
     }
 
+    // Filter by date range
+    if (startDate) {
+      const startOfDay = new Date(startDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      filtered = filtered.filter(order => new Date(order.created_at) >= startOfDay);
+    }
+    
+    if (endDate) {
+      const endOfDay = new Date(endDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      filtered = filtered.filter(order => new Date(order.created_at) <= endOfDay);
+    }
+
     setFilteredOrders(filtered);
   };
 
@@ -159,6 +181,80 @@ const OrderManagement = () => {
         variant: "destructive",
       });
     }
+  };
+
+  const updateBulkOrderStatus = async () => {
+    if (selectedOrders.length === 0) {
+      toast({
+        title: "Error",
+        description: "Pilih pesanan yang ingin diupdate",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: bulkStatus })
+        .in('id', selectedOrders);
+
+      if (error) throw error;
+
+      toast({
+        title: "Berhasil",
+        description: `${selectedOrders.length} pesanan berhasil diperbarui ke status ${getStatusText(bulkStatus)}`,
+      });
+
+      setSelectedOrders([]);
+      fetchOrders();
+    } catch (error) {
+      console.error('Error updating bulk order status:', error);
+      toast({
+        title: "Error",
+        description: "Gagal memperbarui status pesanan",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const selectAllFilteredOrders = () => {
+    setSelectedOrders(filteredOrders.map(order => order.id));
+  };
+
+  const selectOrdersByDateRange = () => {
+    if (!startDate || !endDate) {
+      toast({
+        title: "Error",
+        description: "Pilih rentang tanggal terlebih dahulu",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const ordersInDateRange = filteredOrders.filter(order => {
+      const orderDate = new Date(order.created_at);
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      return orderDate >= start && orderDate <= end;
+    });
+
+    setSelectedOrders(ordersInDateRange.map(order => order.id));
+    
+    toast({
+      title: "Berhasil",
+      description: `${ordersInDateRange.length} pesanan dipilih berdasarkan rentang tanggal`,
+    });
+  };
+
+  const toggleOrderSelection = (orderId: string) => {
+    setSelectedOrders(prev => 
+      prev.includes(orderId) 
+        ? prev.filter(id => id !== orderId)
+        : [...prev, orderId]
+    );
   };
 
   if (loading) {
@@ -195,7 +291,7 @@ const OrderManagement = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <Input
@@ -238,9 +334,150 @@ const OrderManagement = () => {
               setSearchTerm('');
               setStatusFilter('all');
               setPaymentFilter('all');
+              setStartDate(undefined);
+              setEndDate(undefined);
             }} variant="outline">
               Reset Filter
             </Button>
+          </div>
+
+          {/* Date Range Filter */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Tanggal Mulai:</label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !startDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {startDate ? format(startDate, 'dd/MM/yyyy') : "Pilih tanggal mulai"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={startDate}
+                    onSelect={setStartDate}
+                    initialFocus
+                    className="pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">Tanggal Akhir:</label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !endDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {endDate ? format(endDate, 'dd/MM/yyyy') : "Pilih tanggal akhir"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={endDate}
+                    onSelect={setEndDate}
+                    initialFocus
+                    className="pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Bulk Actions */}
+      {selectedOrders.length > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span>Aksi Massal ({selectedOrders.length} pesanan dipilih)</span>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setSelectedOrders([])}
+              >
+                Batal Pilih
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-4 items-end">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Status Baru:</label>
+                <Select value={bulkStatus} onValueChange={(value: OrderStatus) => setBulkStatus(value)}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Menunggu</SelectItem>
+                    <SelectItem value="confirmed">Dikonfirmasi</SelectItem>
+                    <SelectItem value="preparing">Disiapkan</SelectItem>
+                    <SelectItem value="ready">Siap</SelectItem>
+                    <SelectItem value="delivered">Terkirim</SelectItem>
+                    <SelectItem value="cancelled">Dibatalkan</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <Button onClick={updateBulkOrderStatus} className="bg-primary">
+                Update Status
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Selection Actions */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Pilih Pesanan</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-2">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={selectAllFilteredOrders}
+            >
+              <CheckSquare className="h-4 w-4 mr-2" />
+              Pilih Semua ({filteredOrders.length})
+            </Button>
+            
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={selectOrdersByDateRange}
+              disabled={!startDate || !endDate}
+            >
+              <CalendarIcon className="h-4 w-4 mr-2" />
+              Pilih Berdasarkan Tanggal
+            </Button>
+            
+            {selectedOrders.length > 0 && (
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setSelectedOrders([])}
+              >
+                <Square className="h-4 w-4 mr-2" />
+                Batal Pilih Semua
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -253,7 +490,13 @@ const OrderManagement = () => {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Order Info */}
                 <div>
-                  <h3 className="font-semibold text-lg mb-2">{order.child_name}</h3>
+                  <div className="flex items-center gap-3 mb-2">
+                    <Checkbox
+                      checked={selectedOrders.includes(order.id)}
+                      onCheckedChange={() => toggleOrderSelection(order.id)}
+                    />
+                    <h3 className="font-semibold text-lg">{order.child_name}</h3>
+                  </div>
                   <div className="space-y-1 text-sm text-gray-600">
                     <p>Kelas: {order.child_class}</p>
                     <p>ID: {order.id.slice(0, 8)}...</p>
