@@ -25,31 +25,43 @@ function AppContent() {
   const { role: userRole, loading: roleLoading } = useUserRole();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
+  console.log('App: Auth state - user:', user?.email, 'authLoading:', authLoading);
+  console.log('App: Role state - role:', userRole, 'roleLoading:', roleLoading);
+
   useEffect(() => {
     setIsLoggedIn(!!user);
+    console.log('App: isLoggedIn updated to:', !!user);
   }, [user]);
 
   const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     const location = useLocation();
   
+    console.log('ProtectedRoute: Checking access - authLoading:', authLoading, 'roleLoading:', roleLoading, 'isLoggedIn:', isLoggedIn);
+    
     if (authLoading || roleLoading) {
+      console.log('ProtectedRoute: Still loading...');
       return <div className="flex justify-center items-center min-h-screen">
         <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-orange-500"></div>
       </div>;
     }
   
     if (!isLoggedIn) {
+      console.log('ProtectedRoute: Not logged in, redirecting to login');
       return <Navigate to="/login" replace state={{ from: location }} />;
     }
   
+    console.log('ProtectedRoute: Access granted');
     return <>{children}</>;
   };
 
   if (authLoading || roleLoading) {
+    console.log('App: Loading state - authLoading:', authLoading, 'roleLoading:', roleLoading);
     return <div className="flex justify-center items-center min-h-screen">
       <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-orange-500"></div>
     </div>;
   }
+
+  console.log('App: Rendering with role:', userRole, 'isLoggedIn:', isLoggedIn);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -68,13 +80,27 @@ function AppContent() {
               <Routes>
                 {/* Role-based default route */}
                 <Route path="/" element={
-                  userRole === 'admin' ? <Navigate to="/admin" replace /> :
-                  userRole === 'cashier' ? <Navigate to="/cashier" replace /> :
-                  <><Navbar /><Index /></>
+                  userRole === 'admin' ? (
+                    <>
+                      {console.log('App: Redirecting admin to /admin')}
+                      <Navigate to="/admin" replace />
+                    </>
+                  ) :
+                  userRole === 'cashier' ? (
+                    <>
+                      {console.log('App: Redirecting cashier to /cashier')}
+                      <Navigate to="/cashier" replace />
+                    </>
+                  ) : (
+                    <>
+                      {console.log('App: Showing parent dashboard')}
+                      <Navbar /><Index />
+                    </>
+                  )
                 } />
                 
                 {/* Parent routes */}
-                {userRole === 'parent' && (
+                {(userRole === 'parent' || !userRole) && (
                   <>
                     <Route path="/orders" element={<><Navbar /><Orders /></>} />
                     <Route path="/children" element={<><Navbar /><Children /></>} />
