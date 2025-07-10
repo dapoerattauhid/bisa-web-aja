@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
-import { UserRole, ProfileUser, ProfileData, AuthUser } from '@/types/userManagement';
+import { UserRole, ProfileUser, ProfileData } from '@/types/userManagement';
 
 export const useUserManagement = () => {
   const [profileUsers, setProfileUsers] = useState<ProfileUser[]>([]);
@@ -17,7 +17,7 @@ export const useUserManagement = () => {
     try {
       console.log('Fetching users and roles...');
       
-      // First, fetch from profiles table (without email)
+      // Fetch from profiles table
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('id, full_name, created_at, role');
@@ -29,29 +29,6 @@ export const useUserManagement = () => {
       
       console.log('Profiles data:', profilesData);
       
-      // Then fetch auth users to get emails
-      const { data: { users: authUsers }, error: authError } = await supabase.auth.admin.listUsers();
-      
-      if (authError) {
-        console.error('Error fetching auth users:', authError);
-        // Continue without emails if we can't fetch them
-      }
-      
-      // Combine the data with proper type checking
-      let combinedUsers: ProfileUser[] = [];
-      
-      if (profilesData && Array.isArray(profilesData)) {
-        combinedUsers = (profilesData as ProfileData[]).map((profile: ProfileData) => ({
-          id: profile.id,
-          full_name: profile.full_name,
-          created_at: profile.created_at,
-          role: profile.role,
-          email: (authUsers as AuthUser[] | undefined)?.find((user: AuthUser) => user.id === profile.id)?.email || null
-        }));
-      }
-      
-      setProfileUsers(combinedUsers);
-
       // Fetch user roles
       const { data: rolesData, error: rolesError } = await supabase
         .from('user_roles')
@@ -63,6 +40,38 @@ export const useUserManagement = () => {
       }
       
       console.log('Roles data:', rolesData);
+      
+      // Convert profiles data to ProfileUser format
+      let combinedUsers: ProfileUser[] = [];
+      
+      if (profilesData && Array.isArray(profilesData)) {
+        combinedUsers = (profilesData as ProfileData[]).map((profile: ProfileData) => ({
+          id: profile.id,
+          full_name: profile.full_name,
+          created_at: profile.created_at,
+          role: profile.role,
+          email: null // We can't access emails without admin API, so we'll show user ID instead
+        }));
+      }
+      
+      // Add users that exist in user_roles but not in profiles
+      if (rolesData && Array.isArray(rolesData)) {
+        const existingProfileIds = combinedUsers.map(user => user.id);
+        const missingUsers = rolesData
+          .filter(role => !existingProfileIds.includes(role.user_id))
+          .map(role => ({
+            id: role.user_id,
+            full_name: null,
+            created_at: new Date().toISOString(),
+            role: role.role,
+            email: null
+          }));
+        
+        combinedUsers = [...combinedUsers, ...missingUsers];
+        console.log('Combined users with missing profiles:', combinedUsers);
+      }
+      
+      setProfileUsers(combinedUsers);
       setUserRoles(rolesData || []);
     } catch (error) {
       console.error('Error fetching data:', error);
