@@ -5,9 +5,10 @@ import { EmptyOrdersState } from '@/components/orders/EmptyOrdersState';
 import { usePagination } from '@/hooks/usePagination';
 import { PaginationControls } from '@/components/ui/pagination-controls';
 import { useState } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
 
 const Orders = () => {
-  const { orders, loading, retryPayment, batchPayment } = useOrders();
+  const { orders, loading, retryPayment } = useOrders();
   const [activeTab, setActiveTab] = useState('all');
 
   // Filter orders berdasarkan tab aktif
@@ -68,7 +69,6 @@ const Orders = () => {
           <OrderFilters 
             orders={paginatedOrders} 
             onRetryPayment={retryPayment}
-            onBatchPayment={batchPayment}
             activeTab={activeTab}
             onTabChange={setActiveTab}
           />
