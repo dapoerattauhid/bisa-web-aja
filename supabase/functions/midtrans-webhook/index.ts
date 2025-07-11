@@ -62,23 +62,36 @@ serve(async (req) => {
         break;
     }
 
-    // Update order in database
-    const { error } = await supabase
+    // Update all orders with the same midtrans_order_id (for batch payments)
+    const { data: orders, error: fetchError } = await supabase
+      .from('orders')
+      .select('id')
+      .eq('midtrans_order_id', orderId);
+
+    if (fetchError) {
+      console.error('Error fetching orders:', fetchError);
+      throw fetchError;
+    }
+
+    console.log(`Found ${orders?.length || 0} orders with midtrans_order_id: ${orderId}`);
+
+    // Update all matching orders
+    const { error: updateError } = await supabase
       .from('orders')
       .update({
         payment_status: paymentStatus,
         status: orderStatus,
-        midtrans_transaction_id: notification.transaction_id,
+        transaction_id: notification.transaction_id,
         updated_at: new Date().toISOString(),
       })
       .eq('midtrans_order_id', orderId);
 
-    if (error) {
-      console.error('Error updating order:', error);
-      throw error;
+    if (updateError) {
+      console.error('Error updating orders:', updateError);
+      throw updateError;
     }
 
-    console.log(`Order ${orderId} updated: payment_status=${paymentStatus}, status=${orderStatus}`);
+    console.log(`Updated ${orders?.length || 0} orders: payment_status=${paymentStatus}, status=${orderStatus}`);
 
     return new Response('OK', { status: 200 });
   } catch (error) {

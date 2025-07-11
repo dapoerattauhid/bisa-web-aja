@@ -83,10 +83,10 @@ export const useOrders = () => {
 
   const retryPayment = async (order: Order) => {
     try {
-      // Generate new order ID if not exists
+      // Use existing midtrans_order_id if available, otherwise generate new one
       const orderId = order.midtrans_order_id || `ORDER-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       
-      // Update order with new midtrans_order_id if it was null
+      // Update order with midtrans_order_id if it was null
       if (!order.midtrans_order_id) {
         await supabase
           .from('orders')
@@ -107,7 +107,7 @@ export const useOrders = () => {
         name: item.menu_items?.name || 'Unknown Item',
       }));
 
-      console.log('Calling create-payment with:', {
+      console.log('Calling create-payment with existing order ID:', {
         orderId,
         amount: order.total_amount,
         customerDetails,
@@ -168,10 +168,117 @@ export const useOrders = () => {
     }
   };
 
+  const batchPayment = async (selectedOrders: Order[]) => {
+    try {
+      if (selectedOrders.length === 0) {
+        toast({
+          title: "Error",
+          description: "Pilih pesanan yang ingin dibayar",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Generate batch order ID
+      const batchOrderId = `BATCH-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Calculate total amount
+      const totalAmount = selectedOrders.reduce((sum, order) => sum + order.total_amount, 0);
+      
+      // Create customer details from first order
+      const firstOrder = selectedOrders[0];
+      const customerDetails = {
+        first_name: firstOrder.child_name || 'Customer',
+        email: user?.email || 'parent@example.com',
+        phone: user?.user_metadata?.phone || '08123456789',
+      };
+
+      // Combine all items from all orders
+      const itemDetails = selectedOrders.flatMap(order => 
+        order.order_items.map(item => ({
+          id: `${order.id}-${item.id}`,
+          price: item.price,
+          quantity: item.quantity,
+          name: `${item.menu_items?.name || 'Unknown Item'} (${order.child_name})`,
+        }))
+      );
+
+      console.log('Calling create-payment for batch payment:', {
+        orderId: batchOrderId,
+        amount: totalAmount,
+        customerDetails,
+        itemDetails,
+        orderCount: selectedOrders.length
+      });
+
+      const { data: paymentData, error: paymentError } = await supabase.functions.invoke(
+        'create-payment',
+        {
+          body: {
+            orderId: batchOrderId,
+            amount: totalAmount,
+            customerDetails,
+            itemDetails,
+            batchOrderIds: selectedOrders.map(order => order.id), // Send order IDs for batch update
+          },
+        }
+      );
+
+      if (paymentError) {
+        console.error('Batch payment error:', paymentError);
+        throw paymentError;
+      }
+
+      // Update all selected orders with the same batch midtrans_order_id
+      for (const order of selectedOrders) {
+        await supabase
+          .from('orders')
+          .update({ midtrans_order_id: batchOrderId })
+          .eq('id', order.id);
+      }
+
+      if (window.snap && paymentData.snap_token) {
+        window.snap.pay(paymentData.snap_token, {
+          onSuccess: () => {
+            toast({
+              title: "Pembayaran Berhasil!",
+              description: `Pembayaran untuk ${selectedOrders.length} pesanan berhasil diproses.`,
+            });
+            fetchOrders();
+          },
+          onPending: () => {
+            toast({
+              title: "Menunggu Pembayaran",
+              description: `Pembayaran untuk ${selectedOrders.length} pesanan sedang diproses.`,
+            });
+            fetchOrders();
+          },
+          onError: () => {
+            toast({
+              title: "Pembayaran Gagal",
+              description: "Terjadi kesalahan dalam pembayaran batch.",
+              variant: "destructive",
+            });
+          }
+        });
+      } else {
+        throw new Error('Snap token tidak diterima atau Midtrans Snap belum loaded');
+      }
+    } catch (error: any) {
+      console.error('Batch payment error:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Gagal memproses pembayaran batch",
+        variant: "destructive",
+      });
+    }
+  };
+
   return {
     orders,
     loading,
     retryPayment,
+    batchPayment,
     fetchOrders
   };
 };
