@@ -23,20 +23,14 @@ import { useUserRole } from '@/hooks/useUserRole';
 function AppContent() {
   const { user, loading: authLoading } = useAuth();
   const { role: userRole, loading: roleLoading } = useUserRole();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   console.log('App: Auth state - user:', user?.email, 'authLoading:', authLoading);
   console.log('App: Role state - role:', userRole, 'roleLoading:', roleLoading);
 
-  useEffect(() => {
-    setIsLoggedIn(!!user);
-    console.log('App: isLoggedIn updated to:', !!user);
-  }, [user]);
-
   const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     const location = useLocation();
   
-    console.log('ProtectedRoute: Checking access - authLoading:', authLoading, 'roleLoading:', roleLoading, 'isLoggedIn:', isLoggedIn);
+    console.log('ProtectedRoute: Checking access - authLoading:', authLoading, 'roleLoading:', roleLoading, 'user:', !!user);
     
     if (authLoading || roleLoading) {
       console.log('ProtectedRoute: Still loading...');
@@ -45,8 +39,8 @@ function AppContent() {
       </div>;
     }
   
-    if (!isLoggedIn) {
-      console.log('ProtectedRoute: Not logged in, redirecting to login');
+    if (!user) {
+      console.log('ProtectedRoute: No user, redirecting to login');
       return <Navigate to="/login" replace state={{ from: location }} />;
     }
   
@@ -54,6 +48,7 @@ function AppContent() {
     return <>{children}</>;
   };
 
+  // Show loading while determining auth state
   if (authLoading || roleLoading) {
     console.log('App: Loading state - authLoading:', authLoading, 'roleLoading:', roleLoading);
     return <div className="flex justify-center items-center min-h-screen">
@@ -61,7 +56,7 @@ function AppContent() {
     </div>;
   }
 
-  console.log('App: Rendering with role:', userRole, 'isLoggedIn:', isLoggedIn);
+  console.log('App: Rendering with role:', userRole, 'user:', !!user);
 
   return (
     <div className="min-h-screen bg-gray-50">
