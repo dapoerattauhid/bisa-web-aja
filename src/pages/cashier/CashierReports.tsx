@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PrintButton } from '@/components/ui/print-button';
@@ -18,6 +19,7 @@ interface CashPayment {
   created_at: string;
   order_id: string;
   cashier_name: string;
+  cashier_id: string;
   orders: {
     child_name: string;
     child_class: string;
@@ -45,6 +47,7 @@ const CashierReports = () => {
   const [cashiers, setCashiers] = useState<Cashier[]>([]);
   const [dailyReports, setDailyReports] = useState<DailyReport[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   // Pagination untuk transaksi
   const {
@@ -70,7 +73,9 @@ const CashierReports = () => {
     setEndDate(today.toISOString().split('T')[0]);
     setStartDate(lastWeek.toISOString().split('T')[0]);
     
+    fetchCurrentUser();
     fetchCashPayments();
+    fetchCashiers();
   }, []);
 
   useEffect(() => {
@@ -78,16 +83,33 @@ const CashierReports = () => {
     generateDailyReports();
   }, [cashPayments, startDate, endDate, selectedCashier]);
 
-  useEffect(() => {
-    fetchCashiers();
-  }, []);
+  const fetchCurrentUser = async () => {
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error) throw error;
+      
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user?.id)
+        .single();
+      
+      if (profileError) throw profileError;
+      
+      setCurrentUser({ ...user, profile });
+      console.log('Current user profile:', profile);
+    } catch (error) {
+      console.error('Error fetching current user:', error);
+    }
+  };
 
   const fetchCashiers = async () => {
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('id, full_name')
-        .eq('role', 'cashier');
+        .eq('role', 'cashier')
+        .order('full_name');
 
       if (error) throw error;
       setCashiers(data || []);
@@ -98,35 +120,32 @@ const CashierReports = () => {
 
   const fetchCashPayments = async () => {
     try {
-      // Simplified approach - get all paid orders first
+      setLoading(true);
+      
+      // Fetch cash payments with order details
       const { data, error } = await supabase
-        .from('orders')
+        .from('cash_payments')
         .select(`
           id,
-          child_name,
-          child_class,
-          total_amount,
+          amount,
           created_at,
-          payment_status
+          order_id,
+          cashier_id,
+          cashier_name,
+          orders (
+            child_name,
+            child_class
+          )
         `)
-        .eq('payment_status', 'paid')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching cash payments:', error);
+        throw error;
+      }
 
-      const transformedPayments = (data || []).map(order => ({
-        id: order.id,
-        amount: order.total_amount,
-        created_at: order.created_at,
-        order_id: order.id,
-        cashier_name: 'Kasir', // Simplified for now
-        orders: {
-          child_name: order.child_name,
-          child_class: order.child_class
-        }
-      }));
-
-      setCashPayments(transformedPayments);
+      console.log('Fetched cash payments:', data?.length || 0);
+      setCashPayments(data || []);
     } catch (error) {
       console.error('Error fetching cash payments:', error);
       toast({
@@ -142,15 +161,27 @@ const CashierReports = () => {
   const filterPayments = () => {
     let filtered = cashPayments;
 
+    // Filter by current cashier if not admin
+    if (currentUser?.profile?.role === 'cashier') {
+      filtered = filtered.filter(payment => payment.cashier_id === currentUser.id);
+    }
+
+    // Filter by selected cashier (only if admin or if selected cashier matches current user)
+    if (selectedCashier !== 'all') {
+      if (currentUser?.profile?.role === 'admin') {
+        const selectedCashierData = cashiers.find(c => c.id === selectedCashier);
+        if (selectedCashierData) {
+          filtered = filtered.filter(payment => payment.cashier_id === selectedCashier);
+        }
+      }
+    }
+
+    // Filter by date range
     if (startDate && endDate) {
       filtered = filtered.filter(payment => {
         const paymentDate = new Date(payment.created_at).toISOString().split('T')[0];
         return paymentDate >= startDate && paymentDate <= endDate;
       });
-    }
-
-    if (selectedCashier !== 'all') {
-      filtered = filtered.filter(payment => payment.cashier_name === selectedCashier);
     }
 
     setFilteredPayments(filtered);
@@ -185,7 +216,7 @@ const CashierReports = () => {
     totalTransactions: filteredPayments.length,
     totalAmount: filteredPayments.reduce((sum, payment) => sum + payment.amount, 0),
     totalReceived: filteredPayments.reduce((sum, payment) => sum + payment.amount, 0),
-    totalChange: 0 // Simplified for now since we don't have change tracking
+    totalChange: 0 // Could be calculated if we track change amounts
   };
 
   const handlePrint = () => {
@@ -234,10 +265,17 @@ const CashierReports = () => {
   };
 
   const generateCashierReportHTML = () => {
+    const cashierName = currentUser?.profile?.role === 'cashier' 
+      ? currentUser.profile.full_name 
+      : selectedCashier === 'all' 
+        ? 'Semua Kasir' 
+        : cashiers.find(c => c.id === selectedCashier)?.full_name || 'Unknown';
+
     return `
       <div class="print-content">
         <div style="text-align: center; margin-bottom: 30px;">
           <h1 style="font-size: 24px; font-weight: bold; margin-bottom: 10px;">LAPORAN KASIR</h1>
+          <p style="color: #666;">Kasir: ${cashierName}</p>
           <p style="color: #666;">Periode: ${startDate && endDate ? `${formatDate(startDate)} - ${formatDate(endDate)}` : 'Semua Data'}</p>
         </div>
 
@@ -314,6 +352,9 @@ const CashierReports = () => {
     );
   }
 
+  const isAdmin = currentUser?.profile?.role === 'admin';
+  const isCashier = currentUser?.profile?.role === 'cashier';
+
   return (
     <div className="max-w-7xl mx-auto p-6">
       <div className="mb-8 flex justify-between items-center">
@@ -321,7 +362,12 @@ const CashierReports = () => {
           <h1 className="text-3xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent mb-2">
             Laporan Kasir
           </h1>
-          <p className="text-gray-600">Laporan pembayaran tunai dan transaksi</p>
+          <p className="text-gray-600">
+            {isCashier 
+              ? `Laporan pembayaran tunai untuk ${currentUser.profile.full_name}`
+              : 'Laporan pembayaran tunai dan transaksi'
+            }
+          </p>
         </div>
         <PrintButton onPrint={handlePrint} />
       </div>
@@ -352,27 +398,31 @@ const CashierReports = () => {
                 onChange={(e) => setEndDate(e.target.value)}
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Filter Kasir</label>
-              <Select value={selectedCashier} onValueChange={setSelectedCashier}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Pilih Kasir" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Kasir</SelectItem>
-                  {cashiers.map((cashier) => (
-                    <SelectItem key={cashier.id} value={cashier.full_name}>
-                      {cashier.full_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {isAdmin && (
+              <div>
+                <label className="block text-sm font-medium mb-2">Filter Kasir</label>
+                <Select value={selectedCashier} onValueChange={setSelectedCashier}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih Kasir" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Kasir</SelectItem>
+                    {cashiers.map((cashier) => (
+                      <SelectItem key={cashier.id} value={cashier.id}>
+                        {cashier.full_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="flex items-end">
               <Button onClick={() => {
                 setStartDate('');
                 setEndDate('');
-                setSelectedCashier('all');
+                if (isAdmin) {
+                  setSelectedCashier('all');
+                }
               }} variant="outline">
                 Reset Filter
               </Button>
@@ -466,7 +516,7 @@ const CashierReports = () => {
                   </p>
                   <p className="text-xs text-blue-600 flex items-center mt-1">
                     <User className="h-3 w-3 mr-1" />
-                    {payment.cashier_name}
+                    {payment.cashier_name || 'Unknown Cashier'}
                   </p>
                 </div>
                 <div className="text-right">

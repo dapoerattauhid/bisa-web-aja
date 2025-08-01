@@ -1,151 +1,226 @@
 
-import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Route, Routes, Navigate, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Toaster } from '@/components/ui/toaster';
+import { Toaster as Sonner } from '@/components/ui/sonner';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from '@/components/AuthProvider';
 import { useAuth } from '@/hooks/useAuth';
+import { useUserRole } from '@/hooks/useUserRole';
 import { Navbar } from '@/components/Navbar';
+import AdminNavbar from '@/components/AdminNavbar';
+import MidtransScript from '@/components/MidtransScript';
 import Index from '@/pages/Index';
-import Orders from '@/pages/Orders';
-import Children from '@/pages/Children';
 import Auth from '@/pages/Auth';
+import Profile from '@/pages/Profile';
+import Children from '@/pages/Children';
+import Orders from '@/pages/Orders';
+import BatchOrders from '@/pages/BatchOrders';
 import AdminDashboard from '@/pages/admin/AdminDashboard';
-import FoodManagement from '@/pages/admin/FoodManagement';
 import OrderManagement from '@/pages/admin/OrderManagement';
-import OrderRecap from '@/pages/admin/OrderRecap';
+import FoodManagement from '@/pages/admin/FoodManagement';
+import UserManagement from '@/pages/admin/UserManagement';
+import StudentManagement from '@/pages/admin/StudentManagement';
+import { OrderRecap } from '@/pages/admin/OrderRecap';
 import Reports from '@/pages/admin/Reports';
 import ScheduleManagement from '@/pages/admin/ScheduleManagement';
 import PopulateDailyMenus from '@/pages/admin/PopulateDailyMenus';
-import UserManagement from '@/pages/admin/UserManagement';
-import MidtransScript from '@/components/MidtransScript';
 import CashierDashboard from '@/pages/cashier/CashierDashboard';
 import CashierReports from '@/pages/cashier/CashierReports';
-import { useUserRole } from '@/hooks/useUserRole';
+import NotFound from '@/pages/NotFound';
 
-function AppContent() {
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
+// Layout component with proper navbar
+const Layout = ({ children }: { children: React.ReactNode }) => {
+  const { role } = useUserRole();
+  const location = window.location.pathname;
+  
+  // Show AdminNavbar for admin routes
+  if (location.startsWith('/admin')) {
+    return (
+      <>
+        <AdminNavbar />
+        {children}
+      </>
+    );
+  }
+  
+  // Show regular Navbar for all other authenticated routes
+  return (
+    <>
+      <Navbar />
+      {children}
+    </>
+  );
+};
+
+// Protected Route component
+const ProtectedRoute = ({ children, allowedRoles = [] }: { children: React.ReactNode; allowedRoles?: string[] }) => {
   const { user, loading: authLoading } = useAuth();
-  const { role: userRole, loading: roleLoading } = useUserRole();
+  const { role, loading: roleLoading, isAdmin, isCashier } = useUserRole();
 
-  console.log('App: Auth state - user:', user?.email, 'authLoading:', authLoading);
-  console.log('App: Role state - role:', userRole, 'roleLoading:', roleLoading);
+  console.log('ProtectedRoute: Current state', { user: !!user, role, authLoading, roleLoading, allowedRoles });
 
-  const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-    const location = useLocation();
-  
-    console.log('ProtectedRoute: Checking access - authLoading:', authLoading, 'roleLoading:', roleLoading, 'user:', !!user);
-    
-    if (authLoading || roleLoading) {
-      console.log('ProtectedRoute: Still loading...');
-      return <div className="flex justify-center items-center min-h-screen">
-        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-orange-500"></div>
-      </div>;
-    }
-  
-    if (!user) {
-      console.log('ProtectedRoute: No user, redirecting to login');
-      return <Navigate to="/login" replace state={{ from: location }} />;
-    }
-  
-    console.log('ProtectedRoute: Access granted');
-    return <>{children}</>;
-  };
-
-  // Show loading while determining auth state
   if (authLoading || roleLoading) {
-    console.log('App: Loading state - authLoading:', authLoading, 'roleLoading:', roleLoading);
-    return <div className="flex justify-center items-center min-h-screen">
-      <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-orange-500"></div>
-    </div>;
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+      </div>
+    );
   }
 
-  console.log('App: Rendering with role:', userRole, 'user:', !!user);
+  if (!user) {
+    console.log('ProtectedRoute: No user, redirecting to auth');
+    return <Navigate to="/auth" replace />;
+  }
+
+  if (allowedRoles.length > 0 && role) {
+    console.log('ProtectedRoute: Checking role access', { role, allowedRoles, hasAccess: allowedRoles.includes(role) });
+    
+    // Special handling for cashier routes - admin can also access
+    if (allowedRoles.includes('cashier') && (role === 'admin' || role === 'cashier')) {
+      // Allow access
+    } else if (!allowedRoles.includes(role)) {
+      console.log('ProtectedRoute: Access denied, redirecting to home');
+      return <Navigate to="/" replace />;
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <MidtransScript />
-      <Routes>
-        {/* Public routes */}
-        <Route path="/login" element={<Auth />} />
-        <Route path="/register" element={<Auth />} />
-        <Route path="/menu" element={<><Navbar /><Index /></>} />
-        
-        {/* Protected routes */}
-        <Route
-          path="/*"
-          element={
-            <ProtectedRoute>
-              <Routes>
-                {/* Role-based default route */}
-                <Route path="/" element={
-                  userRole === 'admin' ? (
-                    <>
-                      {console.log('App: Redirecting admin to /admin')}
-                      <Navigate to="/admin" replace />
-                    </>
-                  ) :
-                  userRole === 'cashier' ? (
-                    <>
-                      {console.log('App: Redirecting cashier to /cashier')}
-                      <Navigate to="/cashier" replace />
-                    </>
-                  ) : (
-                    <>
-                      {console.log('App: Showing parent dashboard')}
-                      <Navbar /><Index />
-                    </>
-                  )
-                } />
-                
-                {/* Parent routes */}
-                {(userRole === 'parent' || !userRole) && (
-                  <>
-                    <Route path="/orders" element={<><Navbar /><Orders /></>} />
-                    <Route path="/children" element={<><Navbar /><Children /></>} />
-                  </>
-                )}
-                
-                {/* Admin routes */}
-                {userRole === 'admin' && (
-                  <>
-                    <Route path="/admin" element={<><Navbar /><AdminDashboard /></>} />
-                    <Route path="/admin/food-management" element={<><Navbar /><FoodManagement /></>} />
-                    <Route path="/admin/order-management" element={<><Navbar /><OrderManagement /></>} />
-                    <Route path="/admin/order-recap" element={<><Navbar /><OrderRecap /></>} />
-                    <Route path="/admin/reports" element={<><Navbar /><Reports /></>} />
-                    <Route path="/admin/schedule-management" element={<><Navbar /><ScheduleManagement /></>} />
-                    <Route path="/admin/populate-daily-menus" element={<><Navbar /><PopulateDailyMenus /></>} />
-                    <Route path="/admin/user-management" element={<><Navbar /><UserManagement /></>} />
-                  </>
-                )}
-                
-                {/* Cashier routes */}
-                {userRole === 'cashier' && (
-                  <>
-                    <Route path="/cashier" element={<><Navbar /><CashierDashboard /></>} />
-                    <Route path="/cashier/reports" element={<><Navbar /><CashierReports /></>} />
-                  </>
-                )}
-                
-                {/* Default route - redirect to appropriate dashboard */}
-                <Route path="*" element={
-                  <Navigate to={
-                    userRole === 'admin' ? '/admin' :
-                    userRole === 'cashier' ? '/cashier' :
-                    '/'
-                  } replace />
-                } />
-              </Routes>
-            </ProtectedRoute>
-          }
-        />
-      </Routes>
-    </div>
+    <Layout>
+      {children}
+    </Layout>
   );
-}
+};
+
+// App routes component
+const AppRoutes = () => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+      </div>
+    );
+  }
+
+  return (
+    <Routes>
+      <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
+      <Route path="/" element={
+        <ProtectedRoute>
+          <Index />
+        </ProtectedRoute>
+      } />
+      <Route path="/profile" element={
+        <ProtectedRoute>
+          <Profile />
+        </ProtectedRoute>
+      } />
+      <Route path="/children" element={
+        <ProtectedRoute>
+          <Children />
+        </ProtectedRoute>
+      } />
+      <Route path="/orders" element={
+        <ProtectedRoute>
+          <Orders />
+        </ProtectedRoute>
+      } />
+      <Route path="/batch-orders" element={
+        <ProtectedRoute>
+          <BatchOrders />
+        </ProtectedRoute>
+      } />
+      
+      {/* Admin Routes */}
+      <Route path="/admin" element={
+        <ProtectedRoute allowedRoles={['admin']}>
+          <AdminDashboard />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/orders" element={
+        <ProtectedRoute allowedRoles={['admin']}>
+          <OrderManagement />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/food-management" element={
+        <ProtectedRoute allowedRoles={['admin']}>
+          <FoodManagement />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/user-management" element={
+        <ProtectedRoute allowedRoles={['admin']}>
+          <UserManagement />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/student-management" element={
+        <ProtectedRoute allowedRoles={['admin']}>
+          <StudentManagement />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/recap" element={
+        <ProtectedRoute allowedRoles={['admin']}>
+          <OrderRecap />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/reports" element={
+        <ProtectedRoute allowedRoles={['admin']}>
+          <Reports />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/schedule" element={
+        <ProtectedRoute allowedRoles={['admin']}>
+          <ScheduleManagement />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/populate-menus" element={
+        <ProtectedRoute allowedRoles={['admin']}>
+          <PopulateDailyMenus />
+        </ProtectedRoute>
+      } />
+      
+      {/* Cashier Routes */}
+      <Route path="/cashier" element={
+        <ProtectedRoute allowedRoles={['cashier', 'admin']}>
+          <CashierDashboard />
+        </ProtectedRoute>
+      } />
+      <Route path="/cashier/reports" element={
+        <ProtectedRoute allowedRoles={['cashier', 'admin']}>
+          <CashierReports />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
+};
 
 function App() {
   return (
-    <Router>
-      <AppContent />
-    </Router>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AuthProvider>
+            <AppRoutes />
+            <MidtransScript />
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
   );
 }
 

@@ -14,10 +14,40 @@ export type Database = {
   }
   public: {
     Tables: {
+      batch_orders: {
+        Row: {
+          batch_id: string
+          created_at: string
+          id: string
+          order_id: string
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string
+          id?: string
+          order_id: string
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string
+          id?: string
+          order_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "batch_orders_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cash_payments: {
         Row: {
           amount: number
           cashier_id: string
+          cashier_name: string | null
           change_amount: number
           created_at: string | null
           id: string
@@ -28,6 +58,7 @@ export type Database = {
         Insert: {
           amount: number
           cashier_id: string
+          cashier_name?: string | null
           change_amount?: number
           created_at?: string | null
           id?: string
@@ -38,6 +69,7 @@ export type Database = {
         Update: {
           amount?: number
           cashier_id?: string
+          cashier_name?: string | null
           change_amount?: number
           created_at?: string | null
           id?: string
@@ -46,6 +78,20 @@ export type Database = {
           received_amount?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "cash_payments_cashier_id_fkey"
+            columns: ["cashier_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_payments_cashier_id_fkey"
+            columns: ["cashier_id"]
+            isOneToOne: false
+            referencedRelation: "view_user_profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "cash_payments_order_id_fkey"
             columns: ["order_id"]
@@ -82,6 +128,8 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          nik: string | null
+          nis: string | null
           updated_at: string
           user_id: string
         }
@@ -90,6 +138,8 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          nik?: string | null
+          nis?: string | null
           updated_at?: string
           user_id: string
         }
@@ -98,8 +148,52 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          nik?: string | null
+          nis?: string | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "children_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "children_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "view_user_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      classes: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -230,57 +324,97 @@ export type Database = {
       }
       orders: {
         Row: {
+          admin_fee: number | null
           child_class: string | null
+          child_id: string | null
           child_name: string | null
           created_at: string
+          created_by: string
           delivery_date: string | null
           id: string
           midtrans_order_id: string | null
+          midtrans_transaction_id: string | null
           notes: string | null
+          order_date: string | null
           order_number: string
+          parent_notes: string | null
           payment_method: string | null
           payment_status: string | null
+          snap_token: string | null
           status: string | null
           total_amount: number
-          transaction_id: string | null
           updated_at: string
           user_id: string | null
         }
         Insert: {
+          admin_fee?: number | null
           child_class?: string | null
+          child_id?: string | null
           child_name?: string | null
           created_at?: string
+          created_by: string
           delivery_date?: string | null
           id?: string
           midtrans_order_id?: string | null
+          midtrans_transaction_id?: string | null
           notes?: string | null
+          order_date?: string | null
           order_number: string
+          parent_notes?: string | null
           payment_method?: string | null
           payment_status?: string | null
+          snap_token?: string | null
           status?: string | null
           total_amount: number
-          transaction_id?: string | null
           updated_at?: string
           user_id?: string | null
         }
         Update: {
+          admin_fee?: number | null
           child_class?: string | null
+          child_id?: string | null
           child_name?: string | null
           created_at?: string
+          created_by?: string
           delivery_date?: string | null
           id?: string
           midtrans_order_id?: string | null
+          midtrans_transaction_id?: string | null
           notes?: string | null
+          order_date?: string | null
           order_number?: string
+          parent_notes?: string | null
           payment_method?: string | null
           payment_status?: string | null
+          snap_token?: string | null
           status?: string | null
           total_amount?: number
-          transaction_id?: string | null
           updated_at?: string
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "orders_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "view_user_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       payments: {
         Row: {
@@ -356,6 +490,63 @@ export type Database = {
         }
         Relationships: []
       }
+      students: {
+        Row: {
+          class_name: string | null
+          created_at: string
+          id: string
+          name: string
+          nik: string
+          nis: string | null
+          updated_at: string
+        }
+        Insert: {
+          class_name?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          nik: string
+          nis?: string | null
+          updated_at?: string
+        }
+        Update: {
+          class_name?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          nik?: string
+          nis?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      system_settings: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          key: string
+          updated_at: string
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          key: string
+          updated_at?: string
+          value: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          key?: string
+          updated_at?: string
+          value?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -408,12 +599,16 @@ export type Database = {
       }
     }
     Functions: {
-      get_user_role: {
-        Args: Record<PropertyKey, never> | { _user_id: string }
+      get_current_user_role: {
+        Args: Record<PropertyKey, never>
         Returns: string
       }
-      has_role: {
-        Args: { _user_id: string; _role: string }
+      is_admin: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
+      is_cashier: {
+        Args: Record<PropertyKey, never>
         Returns: boolean
       }
     }

@@ -1,28 +1,49 @@
+
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Edit, Trash2, Users } from 'lucide-react';
-import { toast } from '@/components/ui/use-toast';
+import { Plus, Users } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
 import { usePagination } from '@/hooks/usePagination';
 import { PaginationControls } from '@/components/ui/pagination-controls';
+import ChildForm from '@/components/children/ChildForm';
+import ChildCard from '@/components/children/ChildCard';
 
 interface Child {
   id: string;
   name: string;
   class_name: string;
+  nik?: string;
+  nis?: string;
   created_at: string;
+}
+
+interface Class {
+  id: string;
+  name: string;
+  description?: string;
+  is_active: boolean;
+}
+
+interface Student {
+  id: string;
+  nik: string;
+  nis?: string;
+  name: string;
+  class_name?: string;
 }
 
 const Children = () => {
   const [children, setChildren] = useState<Child[]>([]);
+  const [classes, setClasses] = useState<Class[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingChild, setEditingChild] = useState<Child | null>(null);
+  const [searchNik, setSearchNik] = useState('');
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const { user } = useAuth();
 
   // Pagination
@@ -44,6 +65,7 @@ const Children = () => {
   useEffect(() => {
     if (user) {
       fetchChildren();
+      fetchClasses();
     }
   }, [user]);
 
@@ -69,11 +91,110 @@ const Children = () => {
     }
   };
 
+  const fetchClasses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('classes')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+
+      if (error) throw error;
+      setClasses(data || []);
+    } catch (error) {
+      console.error('Error fetching classes:', error);
+    }
+  };
+
+  const searchStudentByNik = async () => {
+    if (!searchNik.trim()) {
+      setSelectedStudent(null);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('students')
+        .select('*')
+        .eq('nik', searchNik.trim())
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          toast({
+            title: "Tidak Ditemukan",
+            description: "Siswa dengan NIK tersebut tidak ditemukan",
+            variant: "destructive",
+          });
+        }
+        setSelectedStudent(null);
+        return;
+      }
+
+      setSelectedStudent(data);
+      toast({
+        title: "Siswa Ditemukan!",
+        description: `${data.name} - ${data.class_name || 'Belum ada kelas'}`,
+      });
+    } catch (error) {
+      console.error('Error searching student:', error);
+      setSelectedStudent(null);
+    }
+  };
+
+  const checkNikExists = async (nik: string, excludeChildId?: string) => {
+    try {
+      let query = supabase
+        .from('children')
+        .select('id')
+        .eq('user_id', user?.id)
+        .eq('nik', nik);
+
+      if (excludeChildId) {
+        query = query.neq('id', excludeChildId);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+      return data && data.length > 0;
+    } catch (error) {
+      console.error('Error checking NIK:', error);
+      return false;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const name = formData.get('name') as string;
     const className = formData.get('className') as string;
+    const nik = formData.get('nik') as string;
+    const nis = formData.get('nis') as string;
+
+    // Handle the "no-class" value
+    const processedClassName = className === 'no-class' ? null : className || null;
+
+    // Validate NIK format
+    if (!nik || nik.length !== 16 || !/^\d{16}$/.test(nik)) {
+      toast({
+        title: "Error",
+        description: "NIK harus berisi tepat 16 digit angka",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check if NIK already exists for this user (except when editing the same child)
+    const nikExists = await checkNikExists(nik, editingChild?.id);
+    if (nikExists) {
+      toast({
+        title: "Error",
+        description: "NIK sudah digunakan untuk anak lain. Gunakan NIK yang berbeda.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
       if (editingChild) {
@@ -81,7 +202,9 @@ const Children = () => {
           .from('children')
           .update({
             name,
-            class_name: className,
+            class_name: processedClassName,
+            nik,
+            nis: nis || null,
           })
           .eq('id', editingChild.id);
 
@@ -96,7 +219,9 @@ const Children = () => {
           .insert({
             user_id: user?.id,
             name,
-            class_name: className,
+            class_name: processedClassName,
+            nik,
+            nis: nis || null,
           });
 
         if (error) throw error;
@@ -108,6 +233,8 @@ const Children = () => {
 
       setIsDialogOpen(false);
       setEditingChild(null);
+      setSelectedStudent(null);
+      setSearchNik('');
       fetchChildren();
     } catch (error: any) {
       console.error('Error saving child:', error);
@@ -121,6 +248,8 @@ const Children = () => {
 
   const handleEdit = (child: Child) => {
     setEditingChild(child);
+    setSelectedStudent(null);
+    setSearchNik('');
     setIsDialogOpen(true);
   };
 
@@ -154,6 +283,8 @@ const Children = () => {
 
   const resetForm = () => {
     setEditingChild(null);
+    setSelectedStudent(null);
+    setSearchNik('');
     setIsDialogOpen(false);
   };
 
@@ -185,48 +316,26 @@ const Children = () => {
               Tambah Anak
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>
                 {editingChild ? 'Edit Data Anak' : 'Tambah Anak Baru'}
               </DialogTitle>
               <DialogDescription>
-                {editingChild ? 'Perbarui informasi anak' : 'Masukkan informasi anak untuk pemesanan makanan'}
+                {editingChild ? 'Perbarui informasi anak' : 'Masukkan informasi anak atau cari berdasarkan NIK. NIK wajib diisi.'}
               </DialogDescription>
             </DialogHeader>
             
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Nama Anak</Label>
-                <Input
-                  id="name"
-                  name="name"
-                  required
-                  defaultValue={editingChild?.name || ''}
-                  placeholder="Masukkan nama anak"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="className">Kelas</Label>
-                <Input
-                  id="className"
-                  name="className"
-                  required
-                  defaultValue={editingChild?.class_name || ''}
-                  placeholder="Contoh: 1A, 2B, dll"
-                />
-              </div>
-              
-              <div className="flex justify-end space-x-2 pt-4">
-                <Button type="button" variant="outline" onClick={resetForm}>
-                  Batal
-                </Button>
-                <Button type="submit" className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600">
-                  {editingChild ? 'Perbarui' : 'Tambah'}
-                </Button>
-              </div>
-            </form>
+            <ChildForm
+              child={editingChild}
+              classes={classes}
+              searchNik={searchNik}
+              selectedStudent={selectedStudent}
+              onSubmit={handleSubmit}
+              onCancel={resetForm}
+              onSearchNikChange={setSearchNik}
+              onSearchStudent={searchStudentByNik}
+            />
           </DialogContent>
         </Dialog>
       </div>
@@ -252,42 +361,15 @@ const Children = () => {
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {paginatedChildren.map((child) => (
-              <Card key={child.id} className="hover:shadow-lg transition-shadow">
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span className="text-lg">{child.name}</span>
-                    <div className="flex space-x-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleEdit(child)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleDelete(child.id)}
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </CardTitle>
-                  <CardDescription>
-                    Kelas {child.class_name}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-sm text-gray-600">
-                    Ditambahkan: {new Date(child.created_at).toLocaleDateString('id-ID')}
-                  </div>
-                </CardContent>
-              </Card>
+              <ChildCard
+                key={child.id}
+                child={child}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+              />
             ))}
           </div>
 
-          {/* Pagination Controls */}
           <PaginationControls
             currentPage={currentPage}
             totalPages={totalPages}

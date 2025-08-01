@@ -11,6 +11,8 @@ import {
   Plus,
   TrendingUp,
   UserCog,
+  GraduationCap,
+  User,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -35,7 +37,7 @@ export const Navbar = () => {
 
   const handleSignOut = async () => {
     await signOut();
-    navigate('/login');
+    navigate('/auth');
   };
 
   const getNavItems = () => {
@@ -43,23 +45,28 @@ export const Navbar = () => {
       return [
         { path: '/admin', label: 'Dashboard', icon: BarChart3 },
         { path: '/admin/food-management', label: 'Kelola Menu', icon: UtensilsCrossed },
-        { path: '/admin/order-management', label: 'Kelola Pesanan', icon: ShoppingCart },
-        { path: '/admin/order-recap', label: 'Rekapitulasi', icon: FileText },
+        { path: '/admin/orders', label: 'Kelola Pesanan', icon: ShoppingCart },
+        { path: '/admin/recap', label: 'Rekapitulasi', icon: FileText },
         { path: '/admin/reports', label: 'Laporan', icon: TrendingUp },
-        { path: '/admin/schedule-management', label: 'Jadwal', icon: Calendar },
-        { path: '/admin/populate-daily-menus', label: 'Isi Menu Harian', icon: Plus },
+        { path: '/admin/schedule', label: 'Jadwal', icon: Calendar },
+        { path: '/admin/populate-menus', label: 'Isi Menu Harian', icon: Plus },
         { path: '/admin/user-management', label: 'Kelola Pengguna', icon: UserCog },
+        { path: '/admin/student-management', label: 'Kelola Siswa', icon: GraduationCap },
+        { path: '/profile', label: 'Profile Saya', icon: User },
       ];
     } else if (userRole === 'cashier') {
       return [
         { path: '/cashier', label: 'Dashboard Kasir', icon: BarChart3 },
         { path: '/cashier/reports', label: 'Laporan Kasir', icon: FileText },
+        { path: '/profile', label: 'Profile Saya', icon: User },
       ];
     } else {
       return [
         { path: '/', label: 'Beranda', icon: Home },
         { path: '/orders', label: 'Pesanan Saya', icon: ShoppingCart },
         { path: '/children', label: 'Data Anak', icon: Users },
+        { path: '/batch-orders', label: 'Pesanan Batch', icon: Calendar },
+        { path: '/profile', label: 'Profile Saya', icon: User },
       ];
     }
   };
@@ -105,6 +112,13 @@ export const Navbar = () => {
                   </p>
                 </div>
               </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link to="/profile" className="w-full cursor-pointer">
+                  <User className="mr-2 h-4 w-4" />
+                  <span>Profile Saya</span>
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleSignOut}>
                 Logout

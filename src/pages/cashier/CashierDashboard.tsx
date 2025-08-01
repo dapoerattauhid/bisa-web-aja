@@ -2,15 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { formatPrice, isOrderExpired } from '@/utils/orderUtils';
+import { Search, User, Calendar, CreditCard, Receipt, Eye, EyeOff, CheckSquare, Calculator } from 'lucide-react';
 import { CashPayment } from '@/components/cashier/CashPayment';
-import { formatPrice, formatDate } from '@/utils/orderUtils';
-import { usePagination } from '@/hooks/usePagination';
-import { PaginationControls } from '@/components/ui/pagination-controls';
-import { Search, DollarSign, Receipt, TrendingUp } from 'lucide-react';
+import { StudentSearchCombobox } from '@/components/cashier/StudentSearchCombobox';
+import { CashierBatchPayment } from '@/components/cashier/CashierBatchPayment';
 
 interface Order {
   id: string;
@@ -18,93 +17,117 @@ interface Order {
   child_class: string;
   total_amount: number;
   payment_status: string;
-  status: string;
+  delivery_date: string;
   created_at: string;
   order_items: {
+    id: string;
     quantity: number;
     price: number;
     menu_items: {
       name: string;
+      image_url?: string;
     } | null;
   }[];
-}
-
-interface DailyStats {
-  totalOrders: number;
-  totalRevenue: number;
-  cashPayments: number;
+  children?: {
+    nik?: string;
+    nis?: string;
+  } | null;
 }
 
 const CashierDashboard = () => {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('pending');
-  const [dailyStats, setDailyStats] = useState<DailyStats>({
-    totalOrders: 0,
-    totalRevenue: 0,
-    cashPayments: 0
-  });
-  const [loading, setLoading] = useState(true);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [isBatchMode, setIsBatchMode] = useState(false);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
 
-  // Pagination untuk filtered orders
-  const {
-    currentPage,
-    totalPages,
-    paginatedData: paginatedOrders,
-    goToPage,
-    nextPage,
-    prevPage,
-    canGoNext,
-    canGoPrev,
-    startIndex,
-    endIndex,
-    totalItems
-  } = usePagination({
-    data: filteredOrders,
-    itemsPerPage: 15
-  });
+  console.log('CashierDashboard: Component rendered');
 
   useEffect(() => {
-    fetchOrders();
-    fetchDailyStats();
+    fetchPendingOrders();
   }, []);
 
-  useEffect(() => {
-    filterOrders();
-  }, [orders, searchTerm, statusFilter]);
-
-  const fetchOrders = async () => {
+  const formatDateOnly = (dateString: string | null | undefined) => {
+    if (!dateString) return 'Tidak diatur';
     try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('id-ID', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    } catch (error) {
+      console.error('CashierDashboard: Error formatting date:', error);
+      return 'Format tanggal tidak valid';
+    }
+  };
+
+  const fetchPendingOrders = async () => {
+    try {
+      console.log('CashierDashboard: Fetching pending orders');
+      setLoading(true);
+
+      // Get current user info to verify cashier role
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        console.error('CashierDashboard: User not authenticated:', userError);
+        toast({
+          title: "Error",
+          description: "Anda harus login sebagai kasir",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      console.log('CashierDashboard: Current user:', user.email);
+
       const { data, error } = await supabase
         .from('orders')
         .select(`
-          *,
+          id,
+          child_name,
+          child_class,
+          total_amount,
+          payment_status,
+          delivery_date,
+          created_at,
+          child_id,
+          children (
+            nik,
+            nis
+          ),
           order_items (
+            id,
             quantity,
             price,
-            menu_items (name)
+            menu_items (
+              name,
+              image_url
+            )
           )
         `)
+        .eq('payment_status', 'pending')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('CashierDashboard: Error fetching orders:', error);
+        throw error;
+      }
 
-      const transformedOrders = (data || []).map(order => ({
-        ...order,
-        order_items: order.order_items.map(item => ({
-          ...item,
-          menu_items: item.menu_items || { name: 'Unknown Item' }
-        }))
-      }));
-
-      setOrders(transformedOrders);
+      console.log('CashierDashboard: Fetched orders before filtering:', data?.length || 0);
+      
+      // Filter out expired orders
+      const validOrders = (data || []).filter(order => !isOrderExpired(order.delivery_date));
+      
+      console.log('CashierDashboard: Orders after filtering expired:', validOrders.length);
+      setOrders(validOrders);
     } catch (error) {
-      console.error('Error fetching orders:', error);
+      console.error('CashierDashboard: Error in fetchPendingOrders:', error);
       toast({
         title: "Error",
-        description: "Gagal memuat data pesanan",
+        description: "Gagal memuat data pesanan. Pastikan Anda sudah login sebagai kasir.",
         variant: "destructive",
       });
     } finally {
@@ -112,276 +135,447 @@ const CashierDashboard = () => {
     }
   };
 
-  const fetchDailyStats = async () => {
+  const searchOrders = async (searchValue?: string) => {
+    const termToSearch = searchValue || searchTerm;
+    
+    if (!termToSearch.trim()) {
+      fetchPendingOrders();
+      return;
+    }
+
     try {
-      const today = new Date().toISOString().split('T')[0];
-      
-      // Get today's orders
-      const { data: todayOrders, error: ordersError } = await supabase
+      console.log('CashierDashboard: Searching orders with term:', termToSearch);
+      setLoading(true);
+
+      // Search in multiple ways: by name, class, NIK, NIS
+      const { data: childrenData, error: childrenError } = await supabase
+        .from('children')
+        .select('id, nik, nis, name, class_name')
+        .or(`nik.ilike.%${termToSearch}%,nis.ilike.%${termToSearch}%,name.ilike.%${termToSearch}%,class_name.ilike.%${termToSearch}%`);
+
+      if (childrenError) {
+        console.error('CashierDashboard: Error searching children:', childrenError);
+      }
+
+      const childIds = childrenData?.map(child => child.id) || [];
+      console.log('CashierDashboard: Found children IDs:', childIds);
+
+      // Build the search query
+      let query = supabase
         .from('orders')
-        .select('*')
-        .gte('created_at', today + 'T00:00:00')
-        .lt('created_at', today + 'T23:59:59');
+        .select(`
+          id,
+          child_name,
+          child_class,
+          total_amount,
+          payment_status,
+          delivery_date,
+          created_at,
+          child_id,
+          children (
+            nik,
+            nis
+          ),
+          order_items (
+            id,
+            quantity,
+            price,
+            menu_items (
+              name,
+              image_url
+            )
+          )
+        `)
+        .eq('payment_status', 'pending');
 
-      if (ordersError) throw ordersError;
+      // Add search conditions
+      if (childIds.length > 0) {
+        query = query.or(`child_name.ilike.%${termToSearch}%,child_class.ilike.%${termToSearch}%,child_id.in.(${childIds.join(',')})`);
+      } else {
+        query = query.or(`child_name.ilike.%${termToSearch}%,child_class.ilike.%${termToSearch}%`);
+      }
 
-      // Get today's cash payments
-      const { data: cashPayments, error: cashError } = await supabase
-        .from('payments')
-        .select('*')
-        .eq('payment_method', 'cash')
-        .gte('created_at', today + 'T00:00:00')
-        .lt('created_at', today + 'T23:59:59');
+      const { data, error } = await query.order('created_at', { ascending: false });
 
-      if (cashError) throw cashError;
+      if (error) {
+        console.error('CashierDashboard: Error searching orders:', error);
+        throw error;
+      }
 
-      setDailyStats({
-        totalOrders: todayOrders?.length || 0,
-        totalRevenue: todayOrders?.reduce((sum, order) => sum + order.total_amount, 0) || 0,
-        cashPayments: cashPayments?.length || 0
-      });
+      console.log('CashierDashboard: Search results before filtering:', data?.length || 0);
+      
+      // Filter out expired orders from search results too
+      const validOrders = (data || []).filter(order => !isOrderExpired(order.delivery_date));
+      
+      console.log('CashierDashboard: Search results after filtering expired:', validOrders.length);
+      setOrders(validOrders);
+
+      if (!validOrders || validOrders.length === 0) {
+        toast({
+          title: "Tidak Ditemukan",
+          description: "Tidak ada pesanan yang sesuai dengan pencarian",
+        });
+      }
     } catch (error) {
-      console.error('Error fetching daily stats:', error);
+      console.error('CashierDashboard: Error in searchOrders:', error);
+      toast({
+        title: "Error",
+        description: "Gagal mencari data pesanan",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const filterOrders = () => {
-    let filtered = orders;
-
-    if (searchTerm) {
-      filtered = filtered.filter(order =>
-        order.child_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.child_class?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    if (statusFilter === 'pending') {
-      filtered = filtered.filter(order => order.payment_status === 'pending');
-    } else if (statusFilter === 'paid') {
-      filtered = filtered.filter(order => order.payment_status === 'paid');
-    }
-
-    setFilteredOrders(filtered);
+  const handleStudentSelect = (selectedSearchTerm: string) => {
+    console.log('CashierDashboard: Student selected from autocomplete:', selectedSearchTerm);
+    setSearchTerm(selectedSearchTerm);
+    searchOrders(selectedSearchTerm);
   };
 
   const handlePaymentComplete = () => {
     setSelectedOrder(null);
-    fetchOrders();
-    fetchDailyStats();
+    setIsBatchMode(false);
+    setSelectedOrderIds([]);
+    fetchPendingOrders();
   };
 
-  if (loading) {
-    return (
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="animate-pulse space-y-6">
-          <div className="h-8 bg-gray-200 rounded w-1/3"></div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-32 bg-gray-200 rounded"></div>
-            ))}
-          </div>
-        </div>
-      </div>
+  const toggleOrderDetails = (orderId: string) => {
+    console.log('CashierDashboard: Toggling details for order:', orderId);
+    console.log('CashierDashboard: Current expanded order:', expandedOrderId);
+    setExpandedOrderId(expandedOrderId === orderId ? null : orderId);
+  };
+
+  const handleBatchSelection = (orderId: string, selected: boolean) => {
+    setSelectedOrderIds(prev => 
+      selected 
+        ? [...prev, orderId]
+        : prev.filter(id => id !== orderId)
     );
-  }
+  };
+
+  const handleSelectAllOrders = () => {
+    const allOrderIds = orders.map(order => order.id);
+    setSelectedOrderIds(allOrderIds);
+  };
+
+  const handleClearSelection = () => {
+    setSelectedOrderIds([]);
+    setIsBatchMode(false);
+  };
+
+  const handleStartBatchPayment = () => {
+    if (selectedOrderIds.length === 0) {
+      toast({
+        title: "Pilih Pesanan",
+        description: "Silakan pilih minimal satu pesanan untuk pembayaran batch",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const selectedOrders = orders.filter(order => selectedOrderIds.includes(order.id));
+    setSelectedOrder({ 
+      ...selectedOrders[0], 
+      batchOrders: selectedOrders,
+      total_amount: selectedOrders.reduce((sum, order) => sum + order.total_amount, 0)
+    } as any);
+  };
 
   if (selectedOrder) {
-    return (
-      <div className="max-w-2xl mx-auto p-6">
-        <div className="mb-6">
-          <Button 
-            onClick={() => setSelectedOrder(null)}
-            variant="outline"
-          >
-            ← Kembali ke Daftar Pesanan
-          </Button>
+    // Check if this is a batch payment
+    const isBatchPayment = (selectedOrder as any).batchOrders;
+    
+    if (isBatchPayment) {
+      return (
+        <div className="container mx-auto p-6">
+          <div className="mb-4">
+            <Button 
+              variant="outline" 
+              onClick={() => setSelectedOrder(null)}
+              className="mb-4"
+            >
+              ← Kembali ke Daftar Pesanan
+            </Button>
+          </div>
+          <CashierBatchPayment 
+            orders={(selectedOrder as any).batchOrders}
+            onPaymentComplete={handlePaymentComplete}
+          />
         </div>
-        <CashPayment 
-          order={selectedOrder} 
-          onPaymentComplete={handlePaymentComplete} 
-        />
-      </div>
-    );
+      );
+    } else {
+      return (
+        <div className="container mx-auto p-6">
+          <div className="mb-4">
+            <Button 
+              variant="outline" 
+              onClick={() => setSelectedOrder(null)}
+              className="mb-4"
+            >
+              ← Kembali ke Daftar Pesanan
+            </Button>
+          </div>
+          <CashPayment 
+            order={selectedOrder} 
+            onPaymentComplete={handlePaymentComplete}
+          />
+        </div>
+      );
+    }
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent mb-2">
-          Dashboard Kasir
-        </h1>
-        <p className="text-gray-600">Kelola pembayaran tunai dan transaksi</p>
-      </div>
-
-      {/* Daily Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Pesanan Hari Ini</CardTitle>
-            <Receipt className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{dailyStats.totalOrders}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pendapatan Hari Ini</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {formatPrice(dailyStats.totalRevenue)}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pembayaran Tunai</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{dailyStats.cashPayments}</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filters */}
+    <div className="container mx-auto p-6">
+      {/* Search Card */}
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle>Filter Pesanan</CardTitle>
+          <CardTitle className="flex items-center">
+            <Search className="h-5 w-5 mr-2" />
+            Pencarian Pesanan
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-              <Input
-                placeholder="Cari nama anak/kelas..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
+          <div className="flex gap-2 mb-4">
+            <div className="flex-1">
+              <StudentSearchCombobox
+                onStudentSelect={handleStudentSelect}
+                placeholder="Cari siswa dengan autocomplete..."
               />
             </div>
-            
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Status Pembayaran" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Status</SelectItem>
-                <SelectItem value="pending">Belum Bayar</SelectItem>
-                <SelectItem value="paid">Sudah Bayar</SelectItem>
-              </SelectContent>
-            </Select>
-            
-            <Button onClick={() => {
-              setSearchTerm('');
-              setStatusFilter('pending');
-            }} variant="outline">
-              Reset Filter
+            <Button onClick={() => searchOrders()} disabled={loading}>
+              {loading ? 'Mencari...' : 'Cari'}
             </Button>
+            <Button variant="outline" onClick={fetchPendingOrders}>
+              Reset
+            </Button>
+          </div>
+          
+          <div className="mb-4">
+            <p className="text-sm font-medium mb-2">Atau cari manual:</p>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Ketik nama siswa, kelas, NIK, atau NIS..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && searchOrders()}
+                className="flex-1"
+              />
+            </div>
+          </div>
+          
+          <div className="text-sm text-gray-600">
+            <p>💡 Tips pencarian:</p>
+            <ul className="list-disc ml-6 text-xs">
+              <li>Gunakan autocomplete di atas untuk pencarian yang lebih mudah</li>
+              <li>Atau ketik manual: nama siswa, kelas, NIK 16 digit, atau NIS</li>
+            </ul>
           </div>
         </CardContent>
       </Card>
 
-      {/* Orders List */}
-      <div className="space-y-4">
-        {paginatedOrders.map((order) => (
-          <Card key={order.id}>
-            <CardContent className="p-6">
-              <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 items-center">
-                <div>
-                  <h3 className="font-semibold text-lg">{order.child_name}</h3>
-                  <p className="text-sm text-gray-600">Kelas: {order.child_class}</p>
-                  <p className="text-sm text-gray-600">
-                    {formatDate(order.created_at)}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Items:</p>
-                  <div className="space-y-1">
-                    {order.order_items.slice(0, 2).map((item, index) => (
-                      <div key={index} className="text-sm">
-                        {item.quantity}x {item.menu_items?.name}
-                      </div>
-                    ))}
-                    {order.order_items.length > 2 && (
-                      <div className="text-sm text-gray-500">
-                        +{order.order_items.length - 2} item lainnya
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-green-600">
-                    {formatPrice(order.total_amount)}
-                  </p>
-                  <Badge 
-                    className={
-                      order.payment_status === 'paid' 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-yellow-100 text-yellow-800'
-                    }
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle>Pesanan Pending Pembayaran</CardTitle>
+              <p className="text-sm text-gray-600">
+                Total: {orders.length} pesanan (pesanan kadaluarsa disembunyikan)
+              </p>
+            </div>
+            
+            {/* Batch Payment Controls */}
+            {orders.length > 0 && (
+              <div className="flex gap-2">
+                {!isBatchMode ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsBatchMode(true)}
+                    className="flex items-center"
                   >
-                    {order.payment_status === 'paid' ? 'Lunas' : 'Belum Bayar'}
-                  </Badge>
-                </div>
-
-                <div>
-                  {order.payment_status === 'pending' ? (
-                    <Button
-                      onClick={() => setSelectedOrder(order)}
-                      className="w-full"
-                      size="lg"
-                    >
-                      Proses Pembayaran
-                    </Button>
-                  ) : (
+                    <CheckSquare className="h-4 w-4 mr-2" />
+                    Mode Batch
+                  </Button>
+                ) : (
+                  <>
                     <Button
                       variant="outline"
-                      className="w-full"
-                      disabled
+                      onClick={handleClearSelection}
                     >
-                      Sudah Dibayar
+                      Batal
                     </Button>
-                  )}
-                </div>
+                    <Button
+                      variant="outline"
+                      onClick={handleSelectAllOrders}
+                    >
+                      Pilih Semua
+                    </Button>
+                    <Button
+                      onClick={handleStartBatchPayment}
+                      disabled={selectedOrderIds.length === 0}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      <Calculator className="h-4 w-4 mr-2" />
+                      Bayar Batch ({selectedOrderIds.length})
+                    </Button>
+                  </>
+                )}
               </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+            )}
+          </div>
+          
+          {isBatchMode && (
+            <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>Mode Pembayaran Batch:</strong> Pilih pesanan yang ingin dibayar sekaligus untuk memproses pembayaran tunai secara bersamaan.
+              </p>
+            </div>
+          )}
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="text-center py-8">
+              <p>Memuat data pesanan...</p>
+            </div>
+          ) : orders.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-gray-500">Tidak ada pesanan pending yang dapat dibayar</p>
+              <p className="text-sm text-gray-400 mt-1">Pesanan yang sudah kadaluarsa tidak ditampilkan</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {orders.map((order) => (
+                <Card key={order.id} className={`border-l-4 border-l-orange-500 ${isBatchMode && selectedOrderIds.includes(order.id) ? 'ring-2 ring-blue-500 bg-blue-50' : ''}`}>
+                  <CardContent className="p-4">
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="flex items-start gap-3">
+                        {/* Batch Mode Checkbox */}
+                        {isBatchMode && (
+                          <input
+                            type="checkbox"
+                            checked={selectedOrderIds.includes(order.id)}
+                            onChange={(e) => handleBatchSelection(order.id, e.target.checked)}
+                            className="mt-1 h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
+                          />
+                        )}
+                        
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <User className="h-4 w-4 text-orange-600" />
+                            <span className="font-semibold">{order.child_name}</span>
+                            <Badge variant="outline">{order.child_class}</Badge>
+                          </div>
 
-      {/* Pagination Controls */}
-      <PaginationControls
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onPageChange={goToPage}
-        canGoNext={canGoNext}
-        canGoPrev={canGoPrev}
-        startIndex={startIndex}
-        endIndex={endIndex}
-        totalItems={totalItems}
-        itemLabel="pesanan"
-      />
+                          {order.children && (order.children.nik || order.children.nis) && (
+                            <div className="text-sm text-gray-600 mb-2">
+                              {order.children.nik && (
+                                <span className="mr-4">NIK: {order.children.nik}</span>
+                              )}
+                              {order.children.nis && (
+                                <span>NIS: {order.children.nis}</span>
+                              )}
+                            </div>
+                          )}
 
-      {filteredOrders.length === 0 && (
-        <Card className="text-center py-12">
-          <CardContent>
-            <h3 className="text-lg font-medium mb-2">Tidak Ada Pesanan</h3>
-            <p className="text-gray-600">
-              {statusFilter === 'pending' 
-                ? 'Tidak ada pesanan yang menunggu pembayaran'
-                : 'Tidak ada pesanan yang sesuai dengan filter'
-              }
-            </p>
-          </CardContent>
-        </Card>
-      )}
+                          <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
+                            <div className="flex items-center">
+                              <Calendar className="h-4 w-4 mr-1" />
+                              <span>Katering: {formatDateOnly(order.delivery_date)}</span>
+                            </div>
+                            <div className="flex items-center">
+                              <Receipt className="h-4 w-4 mr-1" />
+                              <span>{order.order_items?.length || 0} item</span>
+                            </div>
+                          </div>
+
+                          <div className="flex justify-between items-center">
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => toggleOrderDetails(order.id)}
+                              >
+                                {expandedOrderId === order.id ? (
+                                  <>
+                                    <EyeOff className="h-4 w-4 mr-1" />
+                                    Sembunyikan Detail
+                                  </>
+                                ) : (
+                                  <>
+                                    <Eye className="h-4 w-4 mr-1" />
+                                    Lihat Detail
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-lg font-bold text-orange-600">
+                                {formatPrice(order.total_amount)}
+                              </p>
+                              {!isBatchMode && (
+                                <Button
+                                  onClick={() => setSelectedOrder(order)}
+                                  className="mt-2"
+                                  size="sm"
+                                >
+                                  <CreditCard className="h-4 w-4 mr-1" />
+                                  Bayar Tunai
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Expanded Order Details */}
+                    {expandedOrderId === order.id && (
+                      <div className="mt-4 p-4 bg-gray-50 rounded-lg border">
+                        <h4 className="font-medium mb-3 text-lg">Detail Pesanan:</h4>
+                        {order.order_items && order.order_items.length > 0 ? (
+                          <div className="space-y-3">
+                            {order.order_items.map((item, index) => (
+                              <div key={item.id || index} className="flex justify-between items-center py-3 border-b border-gray-200 last:border-b-0">
+                                <div className="flex-1">
+                                  <span className="font-medium text-base">
+                                    {item.menu_items?.name || 'Item Tidak Diketahui'}
+                                  </span>
+                                  <div className="text-sm text-gray-600 mt-1">
+                                    <span>Harga satuan: {formatPrice(item.price)}</span>
+                                    <span className="ml-4">Jumlah: {item.quantity}</span>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <span className="font-medium text-lg">
+                                    {formatPrice(item.price * item.quantity)}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-4 text-gray-500">
+                            <p>Tidak ada detail item ditemukan</p>
+                          </div>
+                        )}
+                        <div className="mt-4 pt-4 border-t border-gray-300">
+                          <div className="flex justify-between items-center font-bold text-xl">
+                            <span>Total Pembayaran:</span>
+                            <span className="text-orange-600">
+                              {formatPrice(order.total_amount)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };

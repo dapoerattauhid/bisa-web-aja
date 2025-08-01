@@ -1,6 +1,7 @@
 
 export interface Order {
   id: string;
+  child_id: string | null;
   child_name: string;
   child_class: string;
   total_amount: number;
@@ -8,7 +9,10 @@ export interface Order {
   payment_status: string;
   notes: string | null;
   created_at: string;
+  delivery_date: string | null;
   midtrans_order_id: string | null;
+  snap_token: string | null;
+  admin_fee?: number;
   order_items: {
     id: string;
     quantity: number;

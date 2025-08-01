@@ -3,29 +3,8 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/components/ui/use-toast';
-
-interface OrderItem {
-  id: string;
-  quantity: number;
-  price: number;
-  menu_items: {
-    name: string;
-    image_url: string;
-  } | null;
-}
-
-interface Order {
-  id: string;
-  child_name: string | null;
-  child_class: string | null;
-  total_amount: number;
-  status: string | null;
-  payment_status: string | null;
-  created_at: string;
-  notes: string | null;
-  midtrans_order_id: string | null;
-  order_items: OrderItem[];
-}
+import { canPayOrder } from '@/utils/orderUtils';
+import { Order } from '@/types/order';
 
 export const useOrders = () => {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -40,6 +19,8 @@ export const useOrders = () => {
 
   const fetchOrders = async () => {
     try {
+      console.log('useOrders: Fetching orders for user:', user?.id);
+      
       const { data, error } = await supabase
         .from('orders')
         .select(`
@@ -57,20 +38,38 @@ export const useOrders = () => {
         .eq('user_id', user?.id)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('useOrders: Supabase error:', error);
+        throw error;
+      }
       
-      // Transform the data to match our interface
-      const transformedOrders = (data || []).map(order => ({
-        ...order,
+      console.log('useOrders: Fetched orders:', data?.length || 0);
+      
+      // Transform the data to match our Order interface
+      const transformedOrders: Order[] = (data || []).map(order => ({
+        id: order.id,
+        child_id: order.child_id,
+        child_name: order.child_name || '',
+        child_class: order.child_class || '',
+        total_amount: order.total_amount,
+        status: order.status || 'pending',
+        payment_status: order.payment_status || 'pending',
+        notes: order.notes,
+        created_at: order.created_at,
+        delivery_date: order.delivery_date,
+        midtrans_order_id: order.midtrans_order_id,
+        snap_token: order.snap_token,
         order_items: order.order_items.map(item => ({
-          ...item,
+          id: item.id,
+          quantity: item.quantity,
+          price: item.price,
           menu_items: item.menu_items || { name: 'Unknown Item', image_url: '' }
         }))
       }));
       
       setOrders(transformedOrders);
     } catch (error) {
-      console.error('Error fetching orders:', error);
+      console.error('useOrders: Error fetching orders:', error);
       toast({
         title: "Error",
         description: "Gagal memuat data pesanan",
@@ -83,15 +82,77 @@ export const useOrders = () => {
 
   const retryPayment = async (order: Order) => {
     try {
-      // Generate new order ID if not exists
-      const orderId = order.midtrans_order_id || `ORDER-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      console.log('useOrders: Retry payment for order:', order.id, 'midtrans_order_id:', order.midtrans_order_id);
       
-      // Update order with new midtrans_order_id if it was null
-      if (!order.midtrans_order_id) {
-        await supabase
+      // Check if order can be paid before proceeding
+      if (!canPayOrder(order)) {
+        toast({
+          title: "Tidak Dapat Dibayar",
+          description: "Pesanan ini sudah kadaluarsa atau sudah dibayar",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // If snap_token exists, use it directly
+      if (order.snap_token) {
+        console.log('useOrders: Using existing snap_token:', order.snap_token);
+        
+        if (window.snap) {
+          window.snap.pay(order.snap_token, {
+            onSuccess: () => {
+              console.log('useOrders: Payment success');
+              toast({
+                title: "Pembayaran Berhasil!",
+                description: "Pembayaran berhasil diproses.",
+              });
+              fetchOrders();
+            },
+            onPending: () => {
+              console.log('useOrders: Payment pending');
+              toast({
+                title: "Menunggu Pembayaran",
+                description: "Pembayaran sedang diproses.",
+              });
+              fetchOrders();
+            },
+            onError: () => {
+              console.log('useOrders: Payment error');
+              toast({
+                title: "Pembayaran Gagal",
+                description: "Terjadi kesalahan dalam pembayaran.",
+                variant: "destructive",
+              });
+            },
+            onClose: () => {
+              console.log('useOrders: Payment popup closed');
+            }
+          });
+        } else {
+          throw new Error('Midtrans Snap belum loaded');
+        }
+        return;
+      }
+
+      // If no snap_token, create new payment
+      let orderId = order.midtrans_order_id;
+      
+      if (!orderId) {
+        // Generate new order ID only if doesn't exist
+        orderId = `ORDER-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        console.log('useOrders: Generated new midtrans_order_id:', orderId);
+        
+        // Update order with new midtrans_order_id
+        const { error: updateError } = await supabase
           .from('orders')
           .update({ midtrans_order_id: orderId })
           .eq('id', order.id);
+          
+        if (updateError) {
+          console.error('useOrders: Error updating order:', updateError);
+          throw updateError;
+        }
       }
 
       const customerDetails = {
@@ -107,7 +168,7 @@ export const useOrders = () => {
         name: item.menu_items?.name || 'Unknown Item',
       }));
 
-      console.log('Calling create-payment with:', {
+      console.log('useOrders: Calling create-payment with:', {
         orderId,
         amount: order.total_amount,
         customerDetails,
@@ -127,39 +188,61 @@ export const useOrders = () => {
       );
 
       if (paymentError) {
-        console.error('Payment error:', paymentError);
+        console.error('useOrders: Payment creation error:', paymentError);
         throw paymentError;
       }
 
-      if (window.snap && paymentData.snap_token) {
-        window.snap.pay(paymentData.snap_token, {
-          onSuccess: () => {
-            toast({
-              title: "Pembayaran Berhasil!",
-              description: "Pembayaran berhasil diproses.",
-            });
-            fetchOrders();
-          },
-          onPending: () => {
-            toast({
-              title: "Menunggu Pembayaran",
-              description: "Pembayaran sedang diproses.",
-            });
-            fetchOrders();
-          },
-          onError: () => {
-            toast({
-              title: "Pembayaran Gagal",
-              description: "Terjadi kesalahan dalam pembayaran.",
-              variant: "destructive",
-            });
-          }
-        });
+      console.log('useOrders: Payment response:', paymentData);
+
+      if (paymentData.snap_token) {
+        // Save snap_token to database for future use
+        const { error: saveTokenError } = await supabase
+          .from('orders')
+          .update({ snap_token: paymentData.snap_token })
+          .eq('id', order.id);
+
+        if (saveTokenError) {
+          console.error('useOrders: Error saving snap_token:', saveTokenError);
+        }
+
+        if (window.snap) {
+          window.snap.pay(paymentData.snap_token, {
+            onSuccess: () => {
+              console.log('useOrders: Payment success');
+              toast({
+                title: "Pembayaran Berhasil!",
+                description: "Pembayaran berhasil diproses.",
+              });
+              fetchOrders();
+            },
+            onPending: () => {
+              console.log('useOrders: Payment pending');
+              toast({
+                title: "Menunggu Pembayaran",
+                description: "Pembayaran sedang diproses.",
+              });
+              fetchOrders();
+            },
+            onError: () => {
+              console.log('useOrders: Payment error');
+              toast({
+                title: "Pembayaran Gagal",
+                description: "Terjadi kesalahan dalam pembayaran.",
+                variant: "destructive",
+              });
+            },
+            onClose: () => {
+              console.log('useOrders: Payment popup closed');
+            }
+          });
+        } else {
+          throw new Error('Midtrans Snap belum loaded');
+        }
       } else {
-        throw new Error('Snap token tidak diterima atau Midtrans Snap belum loaded');
+        throw new Error('Snap token tidak diterima');
       }
     } catch (error: any) {
-      console.error('Retry payment error:', error);
+      console.error('useOrders: Retry payment error:', error);
       toast({
         title: "Error",
         description: error.message || "Gagal memproses pembayaran",
