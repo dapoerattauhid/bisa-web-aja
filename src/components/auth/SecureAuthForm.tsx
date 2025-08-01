@@ -111,7 +111,7 @@ export const SecureAuthForm: React.FC<SecureAuthFormProps> = ({ mode, onModeChan
           <img 
             src="https://lh3.googleusercontent.com/d/1ZDW1GB_y68htjrMiZHZQ478Eu0j_DBv-=s360?authuser=0" 
             alt="Dapoer At-Tauhid Logo" 
-            className="h-16 w-16 object-contain"
+            className="h-360 w-360 object-contain"
           />
         </div>
         <CardTitle className="text-2xl font-bold flex items-center justify-center">
